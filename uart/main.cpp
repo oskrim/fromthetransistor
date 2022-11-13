@@ -29,7 +29,7 @@ int	main(int argc, char **argv) {
   unsigned k = 0;
   unsigned readk = 0xf;
   unsigned bauds = 868;
-  unsigned bits[n] = {1, 0, 1, 0, 1, 0, 1, 1, 0};
+  unsigned bits[n] = {0, 1, 0, 1, 0, 1, 0, 1, 1};
   unsigned buf[n]  = {0};
 
   for (unsigned i = 0; i < bauds*steps; i++) {
@@ -49,7 +49,7 @@ int	main(int argc, char **argv) {
       k = k < (n - 1) ? k + 1 : k;
 
       if (readk == n) readk = 0xf;
-      if (tb.uart_rxd_out && readk == 0xf) readk = 0;
+      if (!tb.uart_rxd_out && readk == 0xf) readk = 0;
       if (readk < 0xf) buf[readk++] = tb.uart_rxd_out;
 
       printf("uart_rxd_out: 0x%x\n", tb.uart_rxd_out);

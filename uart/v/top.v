@@ -30,7 +30,6 @@ module top #(
   reg                     r_start_rx;
   reg                     r_start_tx;
 
-  // debug
   assign out_data     = r_data;
   assign out_bit_rx   = r_bit_rx;
   assign out_bit_tx   = r_bit_tx;
@@ -55,10 +54,12 @@ module top #(
       r_bit_tx <= 0;
     else if (r_bit_tx < BW && clk_counter == 0)
       r_bit_tx <= r_bit_tx + 1;
+    else if (r_bit_tx == BW && clk_counter == 0)
+      r_bit_tx <= 15;
 
   always @(posedge clk)
     if (i_reset || r_start_rx)
-      r_data <= 0;
+      r_data <= 10'b1111111111;
     else if (clk_counter == 0)
       r_data[r_bit_rx] <= uart_txd_in;
 
@@ -71,7 +72,7 @@ module top #(
   always @(posedge clk)
     if (i_reset || r_start_rx)
       r_start_rx <= 0;
-    else if (r_bit_rx == 15 && uart_txd_in)
+    else if (r_bit_rx == 15 && !uart_txd_in)
       r_start_rx <= 1;
 
   always @(posedge clk)
@@ -85,9 +86,7 @@ module top #(
     if (r_start_rx)
       clk_counter <= HALF_PER_BAUD;
     else if (clk_counter == 0 || r_start_tx)
-    begin
       clk_counter <= CLOCKS_PER_BAUD - 1;
-    end
     else
       clk_counter <= clk_counter - 1;
   end
