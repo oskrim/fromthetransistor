@@ -83,9 +83,9 @@ module top #(
 
   always @(posedge clk)
   begin
-    if (r_start_rx)
+    if (r_start_rx || r_start_tx)
       clk_counter <= HALF_PER_BAUD;
-    else if (clk_counter == 0 || r_start_tx)
+    else if (clk_counter == 0)
       clk_counter <= CLOCKS_PER_BAUD - 1;
     else
       clk_counter <= clk_counter - 1;
