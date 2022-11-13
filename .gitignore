@@ -3,3 +3,10 @@ examples
 
 .*.swp
 .*.swo
+vivado_output
+.Xil
+__pycache__
+*.jou
+*.log
+*.backup.jou
+*.backup.log

@@ -1,14 +1,14 @@
-#include "Vtop.h"
+#include "Vuart.h"
 #include "verilated.h"
 
-void clock_tb(Vtop &tb) {
+void clock_tb(Vuart &tb) {
   tb.clk = 1;
   tb.eval();
   tb.clk = 0;
   tb.eval();
 }
 
-void reset_tb(Vtop &tb) {
+void reset_tb(Vuart &tb) {
   tb.i_reset = 1;
   clock_tb(tb);
   clock_tb(tb);
@@ -21,7 +21,7 @@ int	main(int argc, char **argv) {
 	contextp = new VerilatedContext;
 	contextp->commandArgs(argc, argv);
 
-	Vtop tb{contextp};
+	Vuart tb{contextp};
   reset_tb(tb);
 
   constexpr unsigned steps = 100;
