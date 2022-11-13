@@ -29,6 +29,7 @@ module top #(
 
   reg                     r_start_rx;
   reg                     r_start_tx;
+  reg                     r_prev_in;
 
   assign out_data     = r_data;
   assign out_bit_rx   = r_bit_rx;
@@ -38,6 +39,9 @@ module top #(
   assign uart_rxd_out = r_out;
   assign led0_b       = r_out;
   assign led3_r       = i_reset;
+
+  always @(posedge clk)
+    r_prev_in <= uart_txd_in;
 
   always @(posedge clk)
     if (i_reset || r_start_tx)
@@ -60,7 +64,7 @@ module top #(
   always @(posedge clk)
     if (i_reset || r_start_rx)
       r_data <= 10'b1111111111;
-    else if (clk_counter == 0)
+    else if (clk_counter == HALF_PER_BAUD)
       r_data[r_bit_rx] <= uart_txd_in;
 
   always @(posedge clk)
@@ -74,20 +78,20 @@ module top #(
   always @(posedge clk)
     if (i_reset || r_start_rx)
       r_start_rx <= 0;
-    else if (r_bit_rx == 15 && !uart_txd_in)
+    else if (r_bit_rx == 15 && !uart_txd_in && r_prev_in)
       r_start_rx <= 1;
 
   always @(posedge clk)
-    if (i_reset || r_start_tx)
+    if (i_reset)
+      r_start_tx <= 1;
+    else if (r_start_tx)
       r_start_tx <= 0;
-    else if (r_bit_rx == BW)
+    else if (r_bit_rx == BW && clk_counter == 0)
       r_start_tx <= 1;
 
   always @(posedge clk)
   begin
-    if (r_start_rx || r_start_tx)
-      clk_counter <= HALF_PER_BAUD;
-    else if (clk_counter == 0)
+    if (clk_counter == 0 || r_start_rx || r_start_tx)
       clk_counter <= CLOCKS_PER_BAUD - 1;
     else
       clk_counter <= clk_counter - 1;

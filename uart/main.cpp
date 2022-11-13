@@ -13,6 +13,7 @@ void reset_tb(Vtop &tb) {
   clock_tb(tb);
   clock_tb(tb);
   tb.i_reset = 0;
+  tb.uart_txd_in = 1;
 }
 
 int	main(int argc, char **argv) {
@@ -47,13 +48,15 @@ int	main(int argc, char **argv) {
     if (!(i % bauds)) {
       tb.uart_txd_in = bits[k];
       k = k < (n - 1) ? k + 1 : k;
+    }
 
+    if (!((i - bauds / 2) % bauds)) {
       if (readk == n) readk = 0xf;
       if (!tb.uart_rxd_out && readk == 0xf) readk = 0;
       if (readk < 0xf) buf[readk++] = tb.uart_rxd_out;
 
       printf("uart_rxd_out: 0x%x\n", tb.uart_rxd_out);
-      //printf("r_data: 0x%x, out_bit_rx: 0x%x, out_bit_tx: 0x%x\n", tb.out_data, tb.out_bit_rx, tb.out_bit_tx);
     }
+    //printf("r_data: 0x%x, out_bit_rx: 0x%x, out_bit_tx: 0x%x\n", tb.out_data, tb.out_bit_rx, tb.out_bit_tx);
   }
 }
