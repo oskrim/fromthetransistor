@@ -65,9 +65,11 @@ module top #(
 
   always @(posedge clk)
     if (i_reset)
-      r_out <= 0;
+      r_out <= 1;
     else if (r_bit_tx != 15)
       r_out <= r_data[r_bit_tx];
+    else
+      r_out <= 1;
 
   always @(posedge clk)
     if (i_reset || r_start_rx)
