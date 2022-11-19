@@ -30,7 +30,7 @@ int	main(int argc, char **argv) {
   unsigned k = 0;
   unsigned readk = 0xf;
   unsigned bauds = 868;
-  unsigned bits[n] = {0, 1, 0, 1, 0, 1, 0, 1, 1};
+  unsigned bits[n] = {0, 1, 1, 1, 0, 0, 0, 1, 0};
   unsigned buf[n]  = {0};
 
   for (unsigned i = 0; i < bauds*steps; i++) {
@@ -46,8 +46,11 @@ int	main(int argc, char **argv) {
     }
 
     if (!(i % bauds)) {
-      tb.uart_txd_in = bits[k];
-      k = k < (n - 1) ? k + 1 : k;
+      if (k == n) tb.uart_txd_in = 1;
+      else {
+        tb.uart_txd_in = bits[k];
+        k = k < n ? k + 1 : k;
+      }
     }
 
     if (!((i - bauds / 2) % bauds)) {

@@ -1,7 +1,7 @@
 `timescale 1ns / 1ps
 
 module top #(
-    parameter             BW=9
+    parameter             BW = 9
   ) (
     input wire            clk,
     input wire		        i_reset,
@@ -13,7 +13,7 @@ module top #(
     output wire           uart_rxd_out
   );
 
-  uart #(BW, 10, 10416) uart_inst (
+  uart #(BW, 32, 10416) uart_inst (
     clk,
     i_reset,
     led0_b,

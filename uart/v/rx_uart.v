@@ -1,7 +1,7 @@
 `timescale 1ns / 1ps
 
 module rx_uart #(
-    parameter                      BW=9,
+    parameter                      BW = 9,
     parameter                      TIMER_BITS = 32,
     parameter  [(TIMER_BITS-1):0]  CLOCKS_PER_BAUD = 868,
     localparam [(TIMER_BITS-1):0]  HALF_PER_BAUD = CLOCKS_PER_BAUD / 2
@@ -11,13 +11,15 @@ module rx_uart #(
 
     output wire           out_start_tx,
     output wire           out_led,
-    output wire [BW:0]    out_data,
+    output wire [(BW):0]  out_data,
     output wire [3:0]     out_bit_rx,
 
     input wire            uart_txd_in
   );
 
-  reg q_uart, qq_uart, ck_uart;
+  reg                     q_uart;
+  reg                     qq_uart;
+  reg                     ck_uart;
 
   reg [(BW):0]            r_data_in;
   reg [(BW):0]            r_data_out;
@@ -50,7 +52,7 @@ module rx_uart #(
   always @(posedge clk)
     if (i_reset || r_start_rx)
       r_data_in <= 10'b1111111111;
-    else if (clk_counter == HALF_PER_BAUD)
+    else if (clk_counter == HALF_PER_BAUD && r_bit_rx < BW)
       r_data_in[r_bit_rx] <= ck_uart;
 
   always @(posedge clk)
@@ -77,32 +79,6 @@ module rx_uart #(
     else
       clk_counter <= clk_counter - 1;
 
-  reg [31:0] debug_counter;
-  reg transition;
-  initial debug_counter = 0;
-  initial transition = 1;
-  always @(posedge clk)
-    if (i_reset)
-    begin
-      debug_counter <= 32'hffffffff;
-      transition <= 1;
-    end
-    else if (debug_counter[31] && !ck_uart)
-    begin
-      debug_counter <= 0;
-      transition <= 0;
-    end
-    else if (!debug_counter[31])
-    begin
-      if (!transition)
-        debug_counter <= debug_counter + 1;
-      if (ck_uart && !transition)
-        transition <= 1;
-    end
-
-  always @(posedge clk)
-    r_debug <= transition && (debug_counter > 9474) && (debug_counter < 11457);
-
   // 2-step sync for metastability
   initial q_uart  = 1'b0;
   initial qq_uart = 1'b0;
@@ -113,4 +89,8 @@ module rx_uart #(
     qq_uart <= q_uart;
     ck_uart <= qq_uart;
   end
+
+  // check if letter A was received
+  always @(posedge clk)
+    r_debug <= (r_data_in[8:1] == 8'b01000001);
 endmodule
