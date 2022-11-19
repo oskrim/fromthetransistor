@@ -2,7 +2,7 @@
 
 module tx_uart #(
     parameter                     BW=9,
-    parameter                     TIMER_BITS = 10,
+    parameter                     TIMER_BITS = 32,
     parameter [(TIMER_BITS-1):0]  CLOCKS_PER_BAUD = 868
   ) (
     input wire            clk,

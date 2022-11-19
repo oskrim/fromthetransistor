@@ -2,9 +2,8 @@
 
 module uart #(
     parameter                     BW=9,
-    parameter                     TIMER_BITS = 10,
-    parameter [(TIMER_BITS-1):0]  CLOCKS_PER_BAUD = 868,
-    parameter [(TIMER_BITS-1):0]  HALF_PER_BAUD = 434
+    parameter                     TIMER_BITS = 32,
+    parameter [(TIMER_BITS-1):0]  CLOCKS_PER_BAUD = 868
   ) (
     input wire            clk,
     input wire            i_reset,
@@ -22,7 +21,6 @@ module uart #(
   );
 
   assign led0_b = uart_rxd_out;
-  assign led3_r = i_reset;
 
   tx_uart #(BW, TIMER_BITS, CLOCKS_PER_BAUD) tx_uart_inst (
     clk,
@@ -33,10 +31,11 @@ module uart #(
     uart_rxd_out
   );
 
-  rx_uart #(BW, TIMER_BITS, CLOCKS_PER_BAUD, HALF_PER_BAUD) rx_uart_inst (
+  rx_uart #(BW, TIMER_BITS, CLOCKS_PER_BAUD) rx_uart_inst (
     clk,
     i_reset,
     out_start_tx,
+    led3_r,
     out_data,
     out_bit_rx,
     uart_txd_in

@@ -13,7 +13,7 @@ module top #(
     output wire           uart_rxd_out
   );
 
-  uart #(BW, 10, 10416, 5208) uart_inst (
+  uart #(BW, 10, 10416) uart_inst (
     clk,
     i_reset,
     led0_b,
