@@ -54,13 +54,15 @@ int	main(int argc, char **argv) {
     }
 
     if (!((i - bauds / 2) % bauds)) {
-      if (readk == n) readk = 0xf;
+      if (readk == n) {
+        readk = 0xf;
+        assert(tb.uart_rxd_out); // stopbit
+      }
       if (!tb.uart_rxd_out && readk == 0xf) readk = 0;
       if (readk < 0xf) buf[readk++] = tb.uart_rxd_out;
 
       printf("uart_rxd_out: 0x%x\n", tb.uart_rxd_out);
     }
-    //printf("r_data: 0x%x, out_bit_rx: 0x%x, out_bit_tx: 0x%x\n", tb.out_data, tb.out_bit_rx, tb.out_bit_tx);
   }
   printf("uart pass\n");
 }

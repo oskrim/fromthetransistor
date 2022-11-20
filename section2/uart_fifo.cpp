@@ -42,32 +42,52 @@ int	main(int argc, char **argv) {
   for (unsigned i = 0; i < bauds*steps; i++) {
     clock_tb(tb);
 
-    if (!((i + 1) % (bauds * 30))) {
-      for (unsigned j = 0; j < n; j++) {
-        printf("buf[%i]: 0x%x, bits[%i]: 0x%x\n", j, buf[j], j, bits[bit][j]);
-        assert(buf[j] == bits[bit][j]);
-      }
-      for (unsigned j = 0; j < n; j++) buf[j] = 0;
-      k = 0;
-      bit++;
-    }
-
     if (!(i % bauds)) {
-      if (k == n) tb.uart_txd_in = 1;
-      else {
-        tb.uart_txd_in = bits[bit][k];
-        k = k < n ? k + 1 : k;
+      if (k > n) {
+        if (++bit == m) {
+          break;
+        } else {
+          k = 0;
+        }
+      } else {
+        if (k == n) {
+          tb.uart_txd_in = 1;
+        } else {
+          tb.uart_txd_in = bits[bit][k];
+        }
+        k++;
       }
     }
+  }
+
+  bit = 0;
+  readk = 0;
+  for (unsigned i = 0; i < bauds*steps; i++) {
+    clock_tb(tb);
 
     if (!((i - bauds / 2) % bauds)) {
-      if (readk == n) readk = 0xf;
-      if (!tb.uart_rxd_out && readk == 0xf) readk = 0;
-      if (readk < 0xf) buf[readk++] = tb.uart_rxd_out;
+      if (readk == n) {
+        readk = 0xf;
+
+        for (unsigned j = 0; j < n; j++) {
+          printf("buf[%i]: 0x%x, bits[%i]: 0x%x\n", j, buf[j], j, bits[bit][j]);
+          assert(buf[j] == bits[bit][j]);
+        }
+        assert(tb.uart_rxd_out);
+
+        for (unsigned j = 0; j < n; j++) buf[j] = 0;
+        bit++;
+      }
+      if (!tb.uart_rxd_out && readk == 0xf) {
+        printf("reading %u", bit);
+        readk = 0;
+      }
+      if (readk < 0xf) {
+        buf[readk++] = tb.uart_rxd_out;
+      }
 
       printf("uart_rxd_out: 0x%x\n", tb.uart_rxd_out);
     }
-    //printf("r_data: 0x%x, out_bit_rx: 0x%x, out_bit_tx: 0x%x\n", tb.out_data, tb.out_bit_rx, tb.out_bit_tx);
   }
   printf("uart_fifo pass\n");
 }

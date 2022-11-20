@@ -1,0 +1,13 @@
+setion2
+uart
+fifo line echo over uart
+
+section3
+uart download to bram with start and stop bytes, or could you already read into ddr?
+simple cpu running instructions from ram on stop byte, part of ram is for data
+
+section4
+all io is mmio, over axi, triggers waitstate, devices responsible for ending wait with ready byte
+read/write, print, hello world over serial
+need ddr at this point, consider using a xilinx memory controller, might grow into a real mmu?
+talking to phy sounds hard, again consider using an off the self core, axi-stream?, connect to ddr?
