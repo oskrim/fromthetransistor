@@ -28,7 +28,7 @@ module tx_uart #(
       r_bit_tx <= 0;
     else if (r_bit_tx < BW && clk_counter == 0)
       r_bit_tx <= r_bit_tx + 1;
-    else if (r_bit_tx == BW && clk_counter == 0)
+    else if (clk_counter == 0)
       r_bit_tx <= 15;
 
   always @(posedge clk)
