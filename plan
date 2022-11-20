@@ -1,6 +1,6 @@
 setion2
-uart
-fifo line echo over uart
+* uart
+* fifo line echo over uart
 
 section3
 uart download to bram with start and stop bytes, or could you already read into ddr?
