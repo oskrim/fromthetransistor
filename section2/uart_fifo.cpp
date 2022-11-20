@@ -24,18 +24,28 @@ int	main(int argc, char **argv) {
 	Vuart_fifo tb{contextp};
   reset_tb(tb);
 
-  constexpr unsigned steps = 100;
+  constexpr unsigned steps = 200;
   constexpr unsigned n = 9;
-  constexpr unsigned m = 3;
+  constexpr unsigned m = 12;
   unsigned i = 0;
   unsigned k = 0;
   unsigned bit = 0;
+  unsigned readbit = 0;
   unsigned readk = 0xf;
   unsigned bauds = 868;
   unsigned bits[m][n] = {
     {0, 1, 1, 1, 0, 0, 0, 1, 0},
     {0, 1, 1, 1, 0, 1, 0, 0, 0},
-    {0, 1, 1, 0, 0, 0, 1, 0, 0}
+    {0, 1, 1, 0, 0, 0, 1, 0, 0},
+    {0, 0, 1, 0, 0, 0, 1, 0, 0},
+    {0, 1, 0, 0, 1, 0, 1, 1, 1},
+    {0, 1, 0, 1, 1, 0, 1, 1, 1},
+    {0, 1, 0, 1, 1, 0, 1, 0, 1},
+    {0, 1, 0, 0, 1, 0, 1, 0, 1},
+    {0, 1, 1, 1, 1, 0, 1, 1, 1},
+    {0, 1, 1, 0, 1, 0, 1, 1, 1},
+    {0, 1, 0, 0, 0, 0, 0, 0, 1},
+    {0, 1, 0, 0, 0, 1, 0, 0, 1}
   };
   unsigned buf[n]  = {0};
 
@@ -44,9 +54,8 @@ int	main(int argc, char **argv) {
 
     if (!(i % bauds)) {
       if (k > n) {
-        if (++bit == m) {
-          break;
-        } else {
+        if (bit < m - 1) {
+          bit++;
           k = 0;
         }
       } else {
@@ -56,28 +65,23 @@ int	main(int argc, char **argv) {
           tb.uart_txd_in = bits[bit][k];
         }
         k++;
-        assert(tb.out_wr_addr == bit);
+        assert(tb.out_wr_addr == (bit % 8));
       }
+      // printf("bit %u regs %u 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x\n", bit, i, tb.out_bit_tx, tb.uart_rxd_out, tb.o_empty, tb.out_rd_addr, tb.out_wr_addr, tb.out_state);
     }
-  }
-
-  bit = 0;
-  readk = 0xf;
-  for (unsigned i = 0; i < bauds*steps; i++) {
-    clock_tb(tb);
 
     if (!((i + bauds / 2) % bauds)) {
       if (readk == n) {
         readk = 0xf;
 
         for (unsigned j = 0; j < n; j++) {
-          printf("buf[%i]: 0x%x, bits[%i]: 0x%x\n", j, buf[j], j, bits[bit][j]);
-          assert(buf[j] == bits[bit][j]);
+          printf("buf[%i]: 0x%x, bits[%i]: 0x%x\n", j, buf[j], j, bits[readbit][j]);
+          assert(buf[j] == bits[readbit][j]);
         }
         assert(tb.uart_rxd_out);
 
         for (unsigned j = 0; j < n; j++) buf[j] = 0;
-        bit++;
+        readbit++;
       }
       if (!tb.uart_rxd_out && readk == 0xf) {
         printf("tb.fifo_data: 0x%x\n", tb.fifo_data);
@@ -86,10 +90,9 @@ int	main(int argc, char **argv) {
       if (readk < 0xf) {
         buf[readk++] = tb.uart_rxd_out;
       }
-      // printf("tb.uart_rxd_out: %u 0x%x 0x%x 0x%x 0x%x\n", i, tb.out_bit_tx, tb.uart_rxd_out, tb.o_empty, tb.out_state);
     }
   }
-  assert(tb.out_rd_addr == m);
 
+  assert(tb.out_rd_addr == (m % 8));
   printf("uart_fifo pass\n");
 }

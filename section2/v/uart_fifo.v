@@ -24,8 +24,8 @@ module uart_fifo #(
     output wire           o_empty,
     output wire [2:0]     out_state,
 
-    output wire [6:0]     out_wr_addr,
-    output wire [6:0]     out_rd_addr,
+    output wire [2:0]     out_wr_addr,
+    output wire [2:0]     out_rd_addr,
 
     input wire            uart_txd_in,
     output wire           uart_rxd_out
@@ -44,6 +44,7 @@ module uart_fifo #(
   assign start_tx = state == START;
   assign out_state = state;
 
+  reg       should_tx;
   reg       r_wr;
   reg       r_rd;
   reg [2:0] state;
@@ -61,7 +62,7 @@ module uart_fifo #(
     else if (state == DONE)
       state <= NEXT;
     else if (state == IDLE)
-      if (ready_tx && !o_empty && out_wr_addr == 3)
+      if (ready_tx && !o_empty && should_tx)
         state <= START;
 
   always @(posedge clk)
@@ -76,8 +77,9 @@ module uart_fifo #(
     else if (state == DONE)
       r_rd <= 1;
 
-  fifo #(8, 7) fifo_inst (
+  fifo #(8, 3) fifo_inst (
     clk,
+    i_reset,
     r_wr,
     r_rd,
     out_data[8:1],
@@ -106,4 +108,11 @@ module uart_fifo #(
     out_bit_rx,
     uart_txd_in
   );
+
+  // for testing
+  always @(posedge clk)
+    if (out_wr_addr[1:0] == 2'b11)
+      should_tx <= 1;
+    else if (o_empty)
+      should_tx <= 0;
 endmodule

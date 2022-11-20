@@ -60,8 +60,6 @@ int	main(int argc, char **argv) {
       }
       if (!tb.uart_rxd_out && readk == 0xf) readk = 0;
       if (readk < 0xf) buf[readk++] = tb.uart_rxd_out;
-
-      printf("uart_rxd_out: 0x%x\n", tb.uart_rxd_out);
     }
   }
   printf("uart pass\n");

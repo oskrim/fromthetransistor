@@ -5,6 +5,7 @@ module fifo #(
     parameter LOGD = 7
   ) (
     input wire           clk,
+    input wire           i_reset,
     input wire           i_wr,
     input wire           i_rd,
     input wire [(W-1):0] i_data,
@@ -37,13 +38,17 @@ module fifo #(
   // reads
   initial rd_addr = 0;
   always @(posedge clk)
-    if (w_rd)
+    if (i_reset)
+      rd_addr <= 0;
+    else if (w_rd)
       rd_addr <= rd_addr + 1;
 
   // writes
   initial wr_addr = 0;
   always @(posedge clk)
-    if (w_wr)
+    if (i_reset)
+      wr_addr <= 0;
+    else if (w_wr)
       wr_addr <= wr_addr + 1;
 
   always @(posedge clk)

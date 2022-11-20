@@ -13,15 +13,19 @@ module top #(
     output wire           uart_rxd_out
   );
 
-  uart #(BW, 32, 10416) uart_inst (
+  uart_fifo #(BW, 32, 10416) uart_fifoi (
     clk,
     i_reset,
     led0_b,
     led3_r,
-    out_data,
+    fifo_data,
     out_bit_rx,
     out_bit_tx,
     out_start_tx,
+    o_empty,
+    out_state,
+    out_wr_addr,
+    out_rd_addr,
     uart_txd_in,
     uart_rxd_out
   );
