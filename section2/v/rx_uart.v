@@ -66,9 +66,7 @@ module rx_uart #(
       r_start_rx <= 1;
 
   always @(posedge clk)
-    if (i_reset)
-      r_start_tx <= 1;
-    else if (r_start_tx)
+    if (r_start_tx)
       r_start_tx <= 0;
     else if (r_bit_rx == BW && clk_counter == 0)
       r_start_tx <= 1;

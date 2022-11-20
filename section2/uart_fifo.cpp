@@ -56,16 +56,17 @@ int	main(int argc, char **argv) {
           tb.uart_txd_in = bits[bit][k];
         }
         k++;
+        assert(tb.out_wr_addr == bit);
       }
     }
   }
 
   bit = 0;
-  readk = 0;
+  readk = 0xf;
   for (unsigned i = 0; i < bauds*steps; i++) {
     clock_tb(tb);
 
-    if (!((i - bauds / 2) % bauds)) {
+    if (!((i + bauds / 2) % bauds)) {
       if (readk == n) {
         readk = 0xf;
 
@@ -79,15 +80,16 @@ int	main(int argc, char **argv) {
         bit++;
       }
       if (!tb.uart_rxd_out && readk == 0xf) {
-        printf("reading %u", bit);
+        printf("tb.fifo_data: 0x%x\n", tb.fifo_data);
         readk = 0;
       }
       if (readk < 0xf) {
         buf[readk++] = tb.uart_rxd_out;
       }
-
-      printf("uart_rxd_out: 0x%x\n", tb.uart_rxd_out);
+      // printf("tb.uart_rxd_out: %u 0x%x 0x%x 0x%x 0x%x\n", i, tb.out_bit_tx, tb.uart_rxd_out, tb.o_empty, tb.out_state);
     }
   }
+  assert(tb.out_rd_addr == m);
+
   printf("uart_fifo pass\n");
 }

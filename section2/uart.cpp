@@ -53,7 +53,7 @@ int	main(int argc, char **argv) {
       }
     }
 
-    if (!((i - bauds / 2) % bauds)) {
+    if (!((i + bauds / 2) % bauds)) {
       if (readk == n) {
         readk = 0xf;
         assert(tb.uart_rxd_out); // stopbit
