@@ -1,6 +1,6 @@
 `timescale 1ns / 1ps
 
-module cpu #(
+module txfifotest #(
     parameter                     BW = 9,
     parameter                     TIMER_BITS = 32,
     parameter [(TIMER_BITS-1):0]  CLOCKS_PER_BAUD = 868

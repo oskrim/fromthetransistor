@@ -1,15 +1,15 @@
-#include "Vcpu.h"
-#include "Vcpu___024root.h"
+#include "Vtxfifotest.h"
+#include "Vtxfifotest___024root.h"
 #include "verilated.h"
 
-void clock_tb(Vcpu &tb) {
+void clock_tb(Vtxfifotest &tb) {
   tb.clk = 1;
   tb.eval();
   tb.clk = 0;
   tb.eval();
 }
 
-void reset_tb(Vcpu &tb) {
+void reset_tb(Vtxfifotest &tb) {
   tb.i_reset = 1;
   clock_tb(tb);
   clock_tb(tb);
@@ -22,7 +22,7 @@ int	main(int argc, char **argv) {
 	contextp = new VerilatedContext;
 	contextp->commandArgs(argc, argv);
 
-	Vcpu tb{contextp};
+	Vtxfifotest tb{contextp};
   reset_tb(tb);
 
   constexpr unsigned steps = 200;
@@ -66,7 +66,7 @@ int	main(int argc, char **argv) {
           tb.uart_txd_in = bits[bit][k];
         }
         k++;
-        assert(tb.rootp->cpu__DOT__txi__DOT__txfifoi__DOT__wr_addr == (bit % 8));
+        assert(tb.rootp->txfifotest__DOT__txi__DOT__txfifoi__DOT__wr_addr == (bit % 8));
       }
     }
 
@@ -92,9 +92,9 @@ int	main(int argc, char **argv) {
     }
   }
 
-  assert(tb.rootp->cpu__DOT__txi__DOT__txfifoi__DOT__wr_addr == (m % 8));
-  assert(tb.rootp->cpu__DOT__txi__DOT__txfifoi__DOT__rd_addr == (m % 8));
-  assert(tb.rootp->cpu__DOT__txi__DOT__empty);
-  assert(!tb.rootp->cpu__DOT__txi__DOT__full);
-  printf("cpu pass\n");
+  assert(tb.rootp->txfifotest__DOT__txi__DOT__txfifoi__DOT__wr_addr == (m % 8));
+  assert(tb.rootp->txfifotest__DOT__txi__DOT__txfifoi__DOT__rd_addr == (m % 8));
+  assert(tb.rootp->txfifotest__DOT__txi__DOT__empty);
+  assert(!tb.rootp->txfifotest__DOT__txi__DOT__full);
+  printf("txfifotest pass\n");
 }
