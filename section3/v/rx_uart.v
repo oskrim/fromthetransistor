@@ -6,35 +6,35 @@ module rx_uart #(
     parameter  [(TIMER_BITS-1):0]  CLOCKS_PER_BAUD = 868,
     localparam [(TIMER_BITS-1):0]  HALF_PER_BAUD = CLOCKS_PER_BAUD / 2
   ) (
-    input wire            clk,
-    input wire            i_reset,
+    input wire             clk,
+    input wire             i_reset,
 
-    output wire           out_start_tx,
-    output wire           out_led,
-    output wire [(BW):0]  out_data,
-    output wire [3:0]     out_bit_rx,
+    output wire            out_start_tx,
+    output wire [(BW-2):0] out_data,
 
-    input wire            uart_txd_in
+    input wire             uart_txd_in
   );
 
   reg                     q_uart;
   reg                     qq_uart;
   reg                     ck_uart;
 
+  /* verilator lint_off UNUSEDSIGNAL */
   reg [(BW):0]            r_data_in;
-  reg [(BW):0]            r_data_out;
+  /* verilator lint_on UNUSEDSIGNAL */
+  reg [(BW-2):0]          r_data_out;
   reg [3:0]               r_bit_rx;
   reg [(TIMER_BITS-1):0]  clk_counter;
 
   reg                     r_start_rx;
   reg                     r_start_tx;
   reg                     r_prev_in;
-  reg                     r_debug;
+
+  wire                    rxing;
 
   assign out_start_tx   = r_start_tx;
-  assign out_bit_rx     = r_bit_rx;
   assign out_data       = r_data_out;
-  assign out_led        = r_debug;
+  assign rxing          = r_bit_rx != BW && r_bit_rx != 15;
 
   always @(posedge clk)
     r_prev_in <= ck_uart;
@@ -44,20 +44,23 @@ module rx_uart #(
       r_bit_rx <= 15;
     else if (r_start_rx)
       r_bit_rx <= 0;
-    else if (r_bit_rx < BW && clk_counter == 0)
-      r_bit_rx <= r_bit_rx + 1;
-    else if (r_bit_rx == BW && clk_counter == 0)
-      r_bit_rx <= 15;
+    else if (clk_counter == 0)
+    begin
+      if (rxing)
+        r_bit_rx <= r_bit_rx + 1;
+      else
+        r_bit_rx <= 15;
+    end
 
   always @(posedge clk)
     if (i_reset || r_start_rx)
       r_data_in <= 10'b1111111111;
-    else if (clk_counter == HALF_PER_BAUD && r_bit_rx < BW)
-      r_data_in[r_bit_rx] <= ck_uart;
+    else if (clk_counter == HALF_PER_BAUD && rxing)
+      r_data_in <= { 1'b1, ck_uart, r_data_in[(BW-1):1] };
 
   always @(posedge clk)
     if (r_start_tx)
-      r_data_out <= r_data_in;
+      r_data_out <= r_data_in[(BW-1):1];
 
   always @(posedge clk)
     if (i_reset || r_start_rx)
@@ -87,8 +90,4 @@ module rx_uart #(
     qq_uart <= q_uart;
     ck_uart <= qq_uart;
   end
-
-  // check if letter A was received
-  always @(posedge clk)
-    r_debug <= (r_data_in[8:1] == 8'b01000001);
 endmodule

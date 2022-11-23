@@ -1,4 +1,5 @@
 #include "Vcpu.h"
+#include "Vcpu___024root.h"
 #include "verilated.h"
 
 void clock_tb(Vcpu &tb) {
@@ -65,9 +66,8 @@ int	main(int argc, char **argv) {
           tb.uart_txd_in = bits[bit][k];
         }
         k++;
-        assert(tb.out_wr_addr == (bit % 8));
+        assert(tb.rootp->cpu__DOT__txi__DOT__txfifoi__DOT__wr_addr == (bit % 8));
       }
-      // printf("bit %u regs %u 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x\n", bit, i, tb.out_bit_tx, tb.uart_rxd_out, tb.o_empty, tb.out_rd_addr, tb.out_wr_addr, tb.out_state);
     }
 
     if (!((i + bauds / 2) % bauds)) {
@@ -84,7 +84,6 @@ int	main(int argc, char **argv) {
         readbit++;
       }
       if (!tb.uart_rxd_out && readk == 0xf) {
-        printf("tb.fifo_data: 0x%x\n", tb.fifo_data);
         readk = 0;
       }
       if (readk < 0xf) {
@@ -93,6 +92,9 @@ int	main(int argc, char **argv) {
     }
   }
 
-  assert(tb.out_rd_addr == (m % 8));
+  assert(tb.rootp->cpu__DOT__txi__DOT__txfifoi__DOT__wr_addr == (m % 8));
+  assert(tb.rootp->cpu__DOT__txi__DOT__txfifoi__DOT__rd_addr == (m % 8));
+  assert(tb.rootp->cpu__DOT__txi__DOT__empty);
+  assert(!tb.rootp->cpu__DOT__txi__DOT__full);
   printf("cpu pass\n");
 }

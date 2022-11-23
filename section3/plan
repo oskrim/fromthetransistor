@@ -1,0 +1,3 @@
+what does the cpu need?
+  2 fifos, code download rx + debug output tx
+  legv8

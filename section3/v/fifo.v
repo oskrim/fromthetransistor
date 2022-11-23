@@ -10,9 +10,6 @@ module fifo #(
     input wire           i_rd,
     input wire [(W-1):0] i_data,
 
-    output wire [(LOGD-1):0] o_wr_addr,
-    output wire [(LOGD-1):0] o_rd_addr,
-
     output wire [(W-1):0] o_data,
     output wire           o_full,
     output wire           o_empty
@@ -30,10 +27,6 @@ module fifo #(
   assign o_empty = wr_addr == rd_addr;
   assign w_wr   = i_wr && !o_full;
   assign w_rd   = i_rd && !o_empty;
-
-  // debug
-  assign o_wr_addr = wr_addr;
-  assign o_rd_addr = rd_addr;
 
   // reads
   initial rd_addr = 0;

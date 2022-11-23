@@ -8,12 +8,13 @@ module tx_uart #(
     input wire            clk,
     input wire            i_reset,
     input wire            i_start_tx,
-    input wire  [(BW):0]  i_data,
+    input wire [(BW-2):0] i_data,
 
     output wire [3:0]     out_bit_tx,
     output wire           uart_rxd_out
   );
 
+  reg [BW:0]              r_data;
   reg [3:0]               r_bit_tx;
   reg                     r_out;
   reg [(TIMER_BITS-1):0]  clk_counter;
@@ -23,21 +24,28 @@ module tx_uart #(
 
   always @(posedge clk)
     if (i_reset)
+    begin
+      r_out <= 1;
       r_bit_tx <= 15;
+    end
     else if (i_start_tx)
+    begin
       r_bit_tx <= 0;
-    else if (r_bit_tx < BW && clk_counter == 0)
-      r_bit_tx <= r_bit_tx + 1;
+      r_data <= { 1'b1, i_data, 1'b0 };
+    end
     else if (clk_counter == 0)
-      r_bit_tx <= 15;
-
-  always @(posedge clk)
-    if (i_reset)
-      r_out <= 1;
-    else if (r_bit_tx != 15)
-      r_out <= i_data[r_bit_tx];
-    else
-      r_out <= 1;
+    begin
+      if (r_bit_tx != BW && r_bit_tx != 15)
+      begin
+        r_bit_tx <= r_bit_tx + 1;
+        { r_out, r_data } <= { r_data[0], { 1'b1, r_data[BW:1] } };
+      end
+      else
+      begin
+        r_out <= 1;
+        r_bit_tx <= 15;
+      end
+    end
 
   always @(posedge clk)
   begin
