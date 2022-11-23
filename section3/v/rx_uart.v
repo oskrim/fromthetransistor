@@ -9,7 +9,7 @@ module rx_uart #(
     input wire             clk,
     input wire             i_reset,
 
-    output wire            out_start_tx,
+    output wire            out_valid,
     output wire [(BW-2):0] out_data,
 
     input wire             uart_txd_in
@@ -20,7 +20,7 @@ module rx_uart #(
   reg                     ck_uart;
 
   /* verilator lint_off UNUSEDSIGNAL */
-  reg [(BW):0]            r_data_in;
+  reg [BW:0]              r_data_in;
   /* verilator lint_on UNUSEDSIGNAL */
   reg [(BW-2):0]          r_data_out;
   reg [3:0]               r_bit_rx;
@@ -32,7 +32,7 @@ module rx_uart #(
 
   wire                    rxing;
 
-  assign out_start_tx   = r_start_tx;
+  assign out_valid   = r_start_tx;
   assign out_data       = r_data_out;
   assign rxing          = r_bit_rx != BW && r_bit_rx != 15;
 

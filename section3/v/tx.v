@@ -16,7 +16,6 @@ module tx #(
     input wire            i_valid,
     input wire  [7:0]     i_data,
 
-    output wire           o_ready,
     output wire           uart_rxd_out
   );
 
@@ -31,7 +30,6 @@ module tx #(
   reg       r_rd;
   reg [2:0] state;
 
-  assign o_ready = !full;
   assign ready_tx = bit_tx == 15;
   assign start_tx = state == START;
 
@@ -61,14 +59,12 @@ module tx #(
     else if (state == START)
       state <= TXING;
     else if (state == TXING)
-    begin
-      if (!start_tx && o_ready)
+      if (!start_tx && ready_tx)
         state <= DONE;
-    end
     else if (state == DONE)
       state <= NEXT;
     else if (state == IDLE)
-      if (o_ready && !empty && ready_tx)
+      if (!empty && ready_tx)
         state <= START;
 
   always @(posedge clk)

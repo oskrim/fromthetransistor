@@ -9,7 +9,6 @@ module txfifotest #(
     input wire            i_reset,
 
     output wire            led0_b,
-    output wire            tx_ready,
     output wire [(BW-2):0] tx_data,
 
     input wire            uart_txd_in,
@@ -25,7 +24,6 @@ module txfifotest #(
     i_reset,
     tx_valid,
     tx_data,
-    tx_ready,
     uart_rxd_out
   );
 
