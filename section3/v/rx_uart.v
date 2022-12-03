@@ -32,7 +32,7 @@ module rx_uart #(
 
   wire                    rxing;
 
-  assign out_valid   = r_start_tx;
+  assign out_valid      = r_start_tx;
   assign out_data       = r_data_out;
   assign rxing          = r_bit_rx != BW && r_bit_rx != 15;
 

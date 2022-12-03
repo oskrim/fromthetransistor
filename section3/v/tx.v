@@ -56,16 +56,20 @@ module tx #(
   always @(posedge clk)
     if (state == NEXT)
       state <= IDLE;
+    else if (state == IDLE)
+    begin
+      if (!empty && ready_tx)
+        state <= START;
+    end
     else if (state == START)
       state <= TXING;
     else if (state == TXING)
-      if (!start_tx && ready_tx)
+    begin
+      if (ready_tx)
         state <= DONE;
+    end
     else if (state == DONE)
       state <= NEXT;
-    else if (state == IDLE)
-      if (!empty && ready_tx)
-        state <= START;
 
   always @(posedge clk)
     if (r_wr)
