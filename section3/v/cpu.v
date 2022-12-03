@@ -17,14 +17,14 @@ module cpu (
     // verilator lint_on UNDRIVEN
   );
 
+  assign pc_addr = pc;
+
   // verilator lint_off UNUSEDSIGNAL
   reg [31:0] pc;
   reg [31:0] r_rd_addr;
   reg [31:0] r_wr_addr;
   reg [31:0] regfile [15:0] /*verilator public_flat_rd*/;
   reg        r_wr_valid;
-
-  assign pc_addr = pc;
 
   // 0xE3A01041
   wire [31:0] insn;
@@ -35,7 +35,7 @@ module cpu (
   wire [3:0]  opcode /* verilator public_flat_rd */;
   wire        op_i;
   wire [3:0]  cond;
-  // verilator lint_on UNUSEDSIGNAL
+  // verilator lint_off UNUSEDSIGNAL
   assign insn   = pc_data;
   assign op2    = insn[11:0];
   assign rd     = insn[15:12];
@@ -60,17 +60,16 @@ module cpu (
     else if (i_running)
       pc <= pc + 4;
 
+  wire [31:0] str_value;
+  wire [7:0] str_shift;
+  assign str_value = op_i ? { 24'b0, op2[7:0] } : regfile[op2[3:0]];
+  assign str_shift = op_i ? { 4'b0, op2[11:8] } : op2[11:4];
+
   always @(posedge clk)
     if (i_running)
     begin
       case (opcode)
-        4'b1101: begin
-          // mov
-          if (op_i)
-            regfile[rd] <= { 24'b0, op2[7:0] };
-          else
-            regfile[rd] <= regfile[op2[3:0]];
-        end
+        4'b1101: /* mov */ regfile[rd] <= str_value << str_shift;
         default: begin end
       endcase
     end
