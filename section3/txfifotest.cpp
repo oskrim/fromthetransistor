@@ -75,7 +75,6 @@ int	main(int argc, char **argv) {
         readk = 0xf;
 
         for (unsigned j = 0; j < n; j++) {
-          printf("buf[%i]: 0x%x, bits[%i]: 0x%x\n", j, buf[j], j, bits[readbit][j]);
           assert(buf[j] == bits[readbit][j]);
         }
         assert(tb.uart_rxd_out);

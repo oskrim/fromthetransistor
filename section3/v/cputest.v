@@ -3,6 +3,7 @@
 module cputest (
     input wire            clk,
     input wire            i_reset,
+    input wire            i_running,
 
     input wire            uart_txd_in,
     output wire           uart_rxd_out
@@ -23,6 +24,7 @@ module cputest (
   cpu cpui (
     clk,
     i_reset,
+    i_running,
     rd_addr,
     wr_addr,
     rd_data,

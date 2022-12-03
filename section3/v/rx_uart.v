@@ -29,10 +29,12 @@ module rx_uart #(
   reg                     r_prev_in;
 
   wire                    rxing;
+  wire                    rx_done;
 
   assign out_valid      = r_start_tx;
   assign out_data       = r_data_out;
   assign rxing          = r_bit_rx != BW && r_bit_rx != 15;
+  assign rx_done        = r_bit_rx == BW && clk_counter == HALF_PER_BAUD;
 
   always @(posedge clk)
     r_prev_in <= ck_uart;
@@ -42,12 +44,12 @@ module rx_uart #(
       r_bit_rx <= 15;
     else if (r_start_rx)
       r_bit_rx <= 0;
+    else if (rx_done)
+      r_bit_rx <= 15;
     else if (clk_counter == 0)
     begin
       if (rxing)
         r_bit_rx <= r_bit_rx + 1;
-      else
-        r_bit_rx <= 15;
     end
 
   always @(posedge clk)
@@ -57,7 +59,7 @@ module rx_uart #(
       r_data_in <= { ck_uart, r_data_in[(BW-2):1] };
 
   always @(posedge clk)
-    if (r_start_tx)
+    if (rx_done)
       r_data_out <= r_data_in;
 
   always @(posedge clk)
@@ -69,7 +71,7 @@ module rx_uart #(
   always @(posedge clk)
     if (r_start_tx)
       r_start_tx <= 0;
-    else if (r_bit_rx == BW && clk_counter == 0)
+    else if (rx_done)
       r_start_tx <= 1;
 
   always @(posedge clk)

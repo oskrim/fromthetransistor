@@ -9,7 +9,7 @@ module ram #(
 
     // from uart, code download
     input wire                     rx_valid,
-    input wire [7:0]               rx_data,
+    input wire [7:0]               rx_data/* verilator public_flat_rd */,
 
     // verilator lint_off UNUSEDSIGNAL
     input wire  [31:0]             rd_addr,
@@ -20,14 +20,14 @@ module ram #(
     input wire                     wr_valid
   );
 
-  reg [31:0] mem [0:((1<<LOGD)-1)];
+  reg [31:0] mem [0:((1<<LOGD)-1)] /* verilator public_flat_rd */;
   reg [31:0] rx_addr;
   reg [1:0]  rx_byte;
 
   assign rd_data = mem[rd_addr];
 
   always @(posedge clk)
-    if (wr_valid)
+    if (wr_valid && !wr_addr[31])
       mem[wr_addr] <= wr_data;
 
   // read from uart
