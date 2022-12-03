@@ -19,9 +19,7 @@ module rx_uart #(
   reg                     qq_uart;
   reg                     ck_uart;
 
-  /* verilator lint_off UNUSEDSIGNAL */
-  reg [BW:0]              r_data_in;
-  /* verilator lint_on UNUSEDSIGNAL */
+  reg [(BW-2):0]          r_data_in;
   reg [(BW-2):0]          r_data_out;
   reg [3:0]               r_bit_rx;
   reg [(TIMER_BITS-1):0]  clk_counter;
@@ -54,13 +52,13 @@ module rx_uart #(
 
   always @(posedge clk)
     if (i_reset || r_start_rx)
-      r_data_in <= 10'b1111111111;
+      r_data_in <= 8'b11111111;
     else if (clk_counter == HALF_PER_BAUD && rxing)
-      r_data_in <= { 1'b1, ck_uart, r_data_in[(BW-1):1] };
+      r_data_in <= { ck_uart, r_data_in[(BW-2):1] };
 
   always @(posedge clk)
     if (r_start_tx)
-      r_data_out <= r_data_in[(BW-1):1];
+      r_data_out <= r_data_in;
 
   always @(posedge clk)
     if (i_reset || r_start_rx)
