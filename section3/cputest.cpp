@@ -22,7 +22,7 @@ void reset_tb(Vcputest &tb) {
 
 constexpr unsigned bauds = 868;
 unsigned instr[10101] = {
-  0xE3A00801,
+  0xE3A00401,
   0xE3A01041,
   0xE5801000,
   0xFFFFFFFF,
@@ -87,8 +87,9 @@ void verify_mem(Vcputest &tb) {
   }
 
   // regs
-  assert(tb.rootp->cputest__DOT__cpui__DOT__regfile[0] == 0x100);
+  assert(tb.rootp->cputest__DOT__cpui__DOT__regfile[0] == 0x10);
   assert(tb.rootp->cputest__DOT__cpui__DOT__regfile[1] == 0x41);
+  assert(tb.rootp->cputest__DOT__rami__DOT__mem[0x10] == 0x41);
   assert(tb.rootp->cputest__DOT__cpui__DOT__pc == 4*n_instr);
   assert(!tb.rootp->cputest__DOT__rami__DOT__r_running);
 
