@@ -81,9 +81,6 @@ module rx_uart #(
       clk_counter <= clk_counter - 1;
 
   // 2-step sync for metastability
-  initial q_uart  = 1'b0;
-  initial qq_uart = 1'b0;
-  initial ck_uart = 1'b0;
   always @(posedge clk)
   begin
     q_uart  <= uart_txd_in;

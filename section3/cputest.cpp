@@ -21,12 +21,13 @@ void reset_tb(Vcputest &tb) {
 }
 
 constexpr unsigned bauds = 868;
-constexpr unsigned n_instr = 3;
-unsigned instr[n_instr] = {
-  0x0000A0E3,
-  0x4110A0E3,
-  0x001080E5,
+unsigned instr[10101] = {
+  0xE3A00000,
+  0xE3A01041,
+  0xE5801000,
+  0xFFFFFFFF,
 };
+unsigned n_instr = 0;
 
 template <typename Arg, typename... Args>
 void print(Arg&& arg, Args&&... args)
@@ -44,6 +45,8 @@ unsigned get_bit(unsigned val, unsigned bit) {
 }
 
 unsigned write_instructions(Vcputest &tb) {
+  while (instr[n_instr++] != 0xFFFFFFFF);
+
   unsigned inst = 0;
   unsigned byte = 0;
   unsigned bit  = 0;
@@ -74,10 +77,6 @@ unsigned write_instructions(Vcputest &tb) {
   }
 }
 
-void run_dry(Vcputest &tb) {
-  for (unsigned i = 0; i < bauds*100; i++) clock_tb(tb);
-}
-
 void verify_mem(Vcputest &tb) {
   // ram
   for (unsigned i = 0; i < n_instr; i++) {
@@ -86,6 +85,12 @@ void verify_mem(Vcputest &tb) {
     }
     assert(tb.rootp->cputest__DOT__rami__DOT__mem[i] == instr[i]);
   }
+
+  // regs
+  assert(tb.rootp->cputest__DOT__cpui__DOT__regfile[0] == 0);
+  assert(tb.rootp->cputest__DOT__cpui__DOT__regfile[1] == 0x41);
+  assert(tb.rootp->cputest__DOT__cpui__DOT__pc == 4*n_instr);
+  assert(!tb.rootp->cputest__DOT__rami__DOT__r_running);
 
   // fifo
   assert(tb.rootp->cputest__DOT__uarti__DOT__txi__DOT__empty);
@@ -100,7 +105,6 @@ int	main(int argc, char **argv) {
 
   reset_tb(tb);
   write_instructions(tb);
-  run_dry(tb);
   verify_mem(tb);
 
   printf("cputest pass\n");

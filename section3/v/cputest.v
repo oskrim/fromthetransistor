@@ -3,7 +3,6 @@
 module cputest (
     input wire            clk,
     input wire            i_reset,
-    input wire            i_running,
 
     input wire            uart_txd_in,
     output wire           uart_rxd_out
@@ -11,6 +10,7 @@ module cputest (
 
   wire rx_valid;
   wire wr_valid;
+  reg cpu_running;
   wire [7:0] rx_data;
   // verilator lint_off UNUSEDSIGNAL
   wire [31:0] rd_data;
@@ -20,15 +20,19 @@ module cputest (
   // verilator lint_on UNDRIVEN
   wire [31:0] wr_data;
   wire [31:0] wr_addr;
+  wire [31:0] pc_data;
+  wire [31:0] pc_addr;
 
   cpu cpui (
     clk,
     i_reset,
-    i_running,
-    rd_addr,
-    wr_addr,
+    cpu_running,
     rd_data,
+    rd_addr,
     wr_data,
+    wr_addr,
+    pc_data,
+    pc_addr,
     wr_valid
   );
 
@@ -52,12 +56,15 @@ module cputest (
   ram rami (
     clk,
     i_reset,
+    cpu_running,
     rx_valid,
     rx_data,
     rd_addr,
     wr_addr,
+    pc_addr,
     rd_data,
     wr_data,
+    pc_data,
     wr_valid
   );
 endmodule

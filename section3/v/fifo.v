@@ -29,7 +29,6 @@ module fifo #(
   assign w_rd   = i_rd && !o_empty;
 
   // reads
-  initial rd_addr = 0;
   always @(posedge clk)
     if (i_reset)
       rd_addr <= 0;
@@ -37,7 +36,6 @@ module fifo #(
       rd_addr <= rd_addr + 1;
 
   // writes
-  initial wr_addr = 0;
   always @(posedge clk)
     if (i_reset)
       wr_addr <= 0;
