@@ -20,17 +20,6 @@ void reset_tb(Vcputest &tb) {
   clock_tb(tb);
 }
 
-constexpr unsigned bauds = 868;
-unsigned instr[10101] = {
-  0xE3A00401,
-  0xE3A01041,
-  0xE5801000,
-  0xE1A001B0,
-  0xE5801000,
-  0xFFFFFFFF,
-};
-unsigned n_instr = 0;
-
 template <typename Arg, typename... Args>
 void print(Arg&& arg, Args&&... args)
 {
@@ -41,6 +30,17 @@ void print(Arg&& arg, Args&&... args)
     std::cout << std::endl;
     std::flush(std::cout);
 }
+
+constexpr unsigned bauds = 868;
+unsigned instr[10101] = {
+  0xE3A00401,
+  0xE3A01041,
+  0xE5801000,
+  0xE1A001B0,
+  0xE5801000,
+  0xFFFFFFFF,
+};
+unsigned n_instr = 0;
 
 unsigned get_bit(unsigned val, unsigned bit) {
   return (val >> bit) & 1;
