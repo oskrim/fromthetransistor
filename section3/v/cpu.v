@@ -16,7 +16,6 @@ module cpu (
   );
 
   // verilator lint_off UNUSEDSIGNAL
-  reg [3:0]  pc_wait;
   reg [31:0] pc;
   reg [31:0] r_rd_addr;
   reg [31:0] r_wr_addr;
@@ -24,7 +23,6 @@ module cpu (
   reg        r_wr_valid;
   reg [31:0] regfile [15:0] /*verilator public_flat_rd*/;
 
-  wire [3:0] wait_cycles;
 
   wire [31:0] insn;
   wire [11:0] root;
@@ -47,8 +45,6 @@ module cpu (
   assign opcode = insn[24:21];
   assign cond   = insn[31:28];
 
-  assign wait_cycles = insn[27:26] == 2'b01 ? 1 : 0;
-
   always @(posedge clk)
     if (r_wr_valid)
       r_wr_valid <= 0;
@@ -62,25 +58,19 @@ module cpu (
     end
 
   always @(posedge clk)
-    if (wait_cycles == pc_wait)
-      pc_wait <= 0;
-    else
-      pc_wait <= pc_wait + 1;
-
-  always @(posedge clk)
     if (i_reset)
     begin
       pc <= 32'h00000000;
     end
-    else if (i_running && wait_cycles == pc_wait)
+    else if (i_running)
       pc <= pc + 4;
 
-  wire [31:0] str_value;
-  wire [7:0] str_shift;
-  assign str_value = insn[25] ? { 24'b0, root[7:0] } : regfile[root[3:0]];
-  assign str_shift = insn[25] ? { 4'b0, root[11:8] } : root[11:4];
-
   // 4.5 data processing
+  wire [31:0] str_value;
+  wire [31:0] str_shift;
+  assign str_value = insn[25] ? { 24'b0, root[7:0] } : regfile[root[3:0]];
+  assign str_shift = insn[25] ? { 28'b0, root[11:8] } : { 24'b0, root[11:4] };
+
   always @(posedge clk)
     if (i_running)
     begin
@@ -91,18 +81,18 @@ module cpu (
     end
 
   // 4.9 single  data transfer
-  wire [31:0] addr /* verilator public_flat_rd */;
-  wire [31:0] offset /* verilator public_flat_rd */;
+  wire [31:0] addr;
+  wire [31:0] offset;
   assign offset = { 20'b0, root };
   assign addr = insn[23] ? regfile[rn] + offset : regfile[rn] - offset;
+
   always @(posedge clk)
     if (i_running && insn[27:26] == 2'b01)
     begin
       if (insn[20]) // load
       begin
         r_rd_addr <= addr;
-        if (wait_cycles == pc_wait)
-          regfile[rd] <= rd_data;
+        regfile[rd] <= rd_data;
       end
       else // store
       begin

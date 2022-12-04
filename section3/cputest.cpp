@@ -25,6 +25,8 @@ unsigned instr[10101] = {
   0xE3A00401,
   0xE3A01041,
   0xE5801000,
+  0xE1A001B0,
+  0xE5801000,
   0xFFFFFFFF,
 };
 unsigned n_instr = 0;
@@ -50,7 +52,7 @@ unsigned write_instructions(Vcputest &tb) {
   unsigned inst = 0;
   unsigned byte = 0;
   unsigned bit  = 0;
-  for (unsigned i = 0; i < (bauds*n_instr*4 + 1)*10; i++) {
+  for (unsigned i = 0; i < (bauds*n_instr*4)*10; i++) {
     clock_tb(tb);
 
     if (!(i % bauds)) {
@@ -77,6 +79,32 @@ unsigned write_instructions(Vcputest &tb) {
   }
 }
 
+void run_program(Vcputest &tb) {
+  unsigned k = 0;
+  unsigned bit = 0xf;
+  unsigned buf[100] = {0};
+  unsigned i = 0;
+  unsigned next = 0;
+  while (i++ < bauds*10) {
+    clock_tb(tb);
+    if (!tb.uart_rxd_out && bit == 0xf) {
+      next = i + bauds + bauds / 2;
+      bit = 0;
+    }
+    if (i == next && bit < 8) {
+      next = i + bauds;
+      buf[k] |= tb.uart_rxd_out << bit;
+      bit++;
+      if (bit == 8) {
+        bit = 0xf;
+        k++;
+      }
+    }
+  }
+  assert(buf[0] == 0x41);
+  assert(k == 1);
+}
+
 void verify_mem(Vcputest &tb) {
   // ram
   for (unsigned i = 0; i < n_instr; i++) {
@@ -87,7 +115,7 @@ void verify_mem(Vcputest &tb) {
   }
 
   // regs
-  assert(tb.rootp->cputest__DOT__cpui__DOT__regfile[0] == 0x10);
+  assert(tb.rootp->cputest__DOT__cpui__DOT__regfile[0] == 0x80000000);
   assert(tb.rootp->cputest__DOT__cpui__DOT__regfile[1] == 0x41);
   assert(tb.rootp->cputest__DOT__rami__DOT__mem[0x10] == 0x41);
   assert(tb.rootp->cputest__DOT__cpui__DOT__pc == 4*n_instr);
@@ -106,6 +134,7 @@ int	main(int argc, char **argv) {
 
   reset_tb(tb);
   write_instructions(tb);
+  run_program(tb);
   verify_mem(tb);
 
   printf("cputest pass\n");
