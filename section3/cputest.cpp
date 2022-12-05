@@ -46,7 +46,7 @@ unsigned get_bit(unsigned val, unsigned bit) {
   return (val >> bit) & 1;
 }
 
-unsigned write_instructions(Vcputest &tb) {
+void write_instructions(Vcputest &tb) {
   while (instr[n_instr++] != 0xFFFFFFFF);
 
   unsigned inst = 0;

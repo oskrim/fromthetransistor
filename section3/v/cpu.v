@@ -72,11 +72,13 @@ module cpu (
   assign str_shift = insn[25] ? { 28'b0, root[11:8] } : { 24'b0, root[11:4] };
 
   always @(posedge clk)
-    if (i_running)
+    if (i_running && insn[27:26] == 2'b00)
     begin
       case (opcode)
         4'b1101: /* mov */ regfile[rd] <= str_value << str_shift;
-        default: begin end
+        default: begin
+          $display("Error [cpu.v]: Unknown opcode 0x%b", opcode); $fatal();
+        end
       endcase
     end
 
