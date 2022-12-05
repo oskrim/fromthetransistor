@@ -8,12 +8,29 @@ def test_insn():
   assert mov('r1', 'r2') == 0xE1A01002
 
 
-# create in-memory files for input and output
 def test_parse():
-  fin = io.StringIO('@ comment\nmov r1, #0x41')
+  code = '''
+    @ comment
+    mov r1, #0x41
+    mov r2, r1
+    bx r2
+    str r1, [r2, #4]
+    ldr r3, [r3, #8]
+  '''
+  encoded = [
+    0xE3A01041,
+    0xE1A02001,
+    0xE12FFF12,
+    0xE5821004,
+    0xE5933008,
+  ]
+  expected = bytes()
+  for insn in encoded:
+    expected += struct.pack('<I', insn)
+  fin = io.StringIO(code)
   fout = io.BytesIO()
   parse(fin, fout)
-  assert(fout.getvalue() == b'\x41\x10\xa0\xe3')
+  assert(fout.getvalue() == expected)
 
 
 def test_simple():

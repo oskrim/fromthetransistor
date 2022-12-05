@@ -6,6 +6,9 @@ import os
 import sys
 import struct
 
+def strip_all(l):
+  return [x.strip() for x in l]
+
 def parse_reg(reg):
   if reg.startswith('r'):
     return int(reg[1:])
@@ -16,6 +19,8 @@ def parse_reg(reg):
 
 
 def parse_int(s):
+  if isinstance(s, int):
+    return s
   if s[0] == '#':
     return parse_int(s[1:])
   elif s[0] == '0' and s[1] == 'x':
@@ -38,6 +43,11 @@ def bx(reg):
     return 0xE12FFF10 | reg
 
 
+def transfer(reg, base_reg, offset, load=False):
+  base = 0xE5900000 if load else 0xE5800000
+  return base | (parse_reg(reg) << 12) | (parse_reg(base_reg) << 16) | parse_int(offset)
+
+
 def parse(f, out):
   fns = {}
   buf = bytes()
@@ -45,6 +55,9 @@ def parse(f, out):
   for line in f:
     line = line.strip().lower()
     insn = None
+
+    if not line:
+      continue
 
     if line.startswith('@'):
       continue
@@ -65,12 +78,24 @@ def parse(f, out):
 
     match asm_insn:
       case 'mov':
-        ops = [x.strip() for x in ops.split(',')]
+        ops = strip_all(ops.split(','))
         if len(ops) != 2:
           raise Exception('invalid mov instruction %s' % line)
         dst = ops[0]
         op2 = ops[1]
         insn = mov(dst, op2)
+
+      case 'ldr' | 'str':
+        # find the content between [], e.g. [r0, #4]
+        ops = ops.split(',', 1)
+        if len(ops) != 2:
+          raise Exception('invalid ldr/str instruction %s' % line)
+        reg = ops.pop(0).strip()
+        ops = strip_all(ops[0].split('[', 1)[1].split(']', 1)[0].split(','))
+        if len(ops) < 2:
+          insn = transfer(reg, ops[0], 0, asm_insn == 'ldr')
+        else:
+          insn = transfer(reg, ops[0], ops[1], asm_insn == 'ldr')
 
       case 'bx':
         insn = bx(ops)
