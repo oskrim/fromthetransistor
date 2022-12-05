@@ -34,7 +34,7 @@ def test_parse():
 
 
 def test_simple():
-  with open('fixtures/simple.s', 'r') as f:
+  with open('../fixtures/simple.s', 'r') as f:
     fout = io.BytesIO()
     parse(f, fout)
     assert(len(fout.getvalue()) == 8)
