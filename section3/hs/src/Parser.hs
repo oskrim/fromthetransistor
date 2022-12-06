@@ -30,11 +30,22 @@ argument = do
   varName <- identifier
   return $ Argument varType varName
 
+returnStatement :: Parser Statement
+returnStatement = do
+  reserved "return"
+  e <- expr
+  return $ Return e
+
+exprStatement :: Parser Statement
+exprStatement = do
+  e <- expr
+  return $ Expr e
+
 statement :: Parser Statement
 statement = do
-  stmt <- expr
+  stmt <- exprStatement <|> returnStatement
   reserved ";"
-  return $ Expr stmt
+  return stmt
 
 function :: Parser Function
 function = do

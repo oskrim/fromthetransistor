@@ -16,6 +16,7 @@ data Function
 
 data Statement
   = Expr Expr
+  | Return Expr
   deriving (Eq, Ord, Show)
 
 data Expr
