@@ -1,21 +1,78 @@
+use super::constants::*;
+use quickcheck::{Arbitrary, Gen, QuickCheck};
+use rand::distributions::{Alphanumeric, DistString};
+
+pub trait Deparse {
+    fn deparse(&self) -> String;
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum Type {
     Int,
     Void,
 }
 
-#[derive(Clone, Debug)]
+impl Deparse for Type {
+    fn deparse(&self) -> String {
+        match self {
+            Type::Int => "int".to_string(),
+            Type::Void => "void".to_string(),
+        }
+    }
+}
+
+fn readable_string(g: &mut Gen) -> String {
+    Alphanumeric.sample_string(&mut rand::thread_rng(), g.size())
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub struct Arg {
     pub ty: Type,
     pub name: String,
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub enum Expr {
-    Int { value: u32 },
+impl Deparse for Arg {
+    fn deparse(&self) -> String {
+        format!("{} {}", self.ty.deparse(), self.name)
+    }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
+pub enum Expr {
+    Int {
+        value: u32,
+    },
+    BinOp {
+        left: Box<Expr>,
+        right: Box<Expr>,
+        op: Op,
+    },
+}
+
+impl Deparse for Expr {
+    fn deparse(&self) -> String {
+        match self {
+            Expr::Int { value } => value.to_string(),
+            Expr::BinOp { left, right, op } => {
+                format!("({} {} {})", left.deparse(), op, right.deparse())
+            }
+        }
+    }
+}
+
+impl Arbitrary for Expr {
+    fn arbitrary(g: &mut Gen) -> Self {
+        Expr::Int {
+            value: u32::arbitrary(g),
+        }
+        // let op = Op::arbitrary(g);
+        // let left = Box::new(Expr::arbitrary(g));
+        // let right = Box::new(Expr::arbitrary(g));
+        // Expr::BinOp { left, right, op }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub struct Function {
     pub ret_type: Type,
     pub ret_expr: Expr,
@@ -23,9 +80,68 @@ pub struct Function {
     pub args: Vec<Arg>,
 }
 
-#[derive(Clone, Debug)]
+impl Deparse for Function {
+    fn deparse(&self) -> String {
+        let args = self
+            .args
+            .iter()
+            .map(|a| a.deparse())
+            .collect::<Vec<_>>()
+            .join(", ");
+        format!(
+            "{} {}({}) {{ return {}; }}",
+            self.ret_type.deparse(),
+            self.name,
+            args,
+            self.ret_expr.deparse()
+        )
+    }
+}
+
+impl<'a> Arbitrary for Function {
+    fn arbitrary(g: &mut Gen) -> Self {
+        let ret_type = Type::Void;
+        let ret_expr = Expr::arbitrary(g);
+        let name = readable_string(g);
+        let mut args = Vec::new();
+        for _ in 0..g.size() {
+            args.push(Arg {
+                ty: Type::Int,
+                name: readable_string(g),
+            });
+        }
+        Function {
+            ret_type,
+            ret_expr,
+            name,
+            args,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub struct Program {
     pub functions: Vec<Function>,
+}
+
+impl Deparse for Program {
+    fn deparse(&self) -> String {
+        self.functions
+            .iter()
+            .map(|f| f.deparse())
+            .collect::<Vec<_>>()
+            .join("\n\n")
+    }
+}
+
+impl Arbitrary for Program {
+    fn arbitrary(g: &mut Gen) -> Self {
+        let mut functions = Vec::new();
+        for _ in 0..g.size() {
+            functions.push(Function::arbitrary(g));
+        }
+        Program { functions }
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -62,10 +178,11 @@ pub fn expected<'a, A>(name: &str, size: usize, state: State<'a>) -> Answer<'a, 
     let end = state.index + size;
     let err = state.code.get(state.index..end).unwrap_or("");
     let rest = state.code.get(end..).unwrap_or("");
-    Err(format!(
-        "Expected `{}`:\n\x1b[31m\x1b[01m{}\x1b[0m{}",
-        name, err, rest
-    ))
+    // Err(format!(
+    //     "Expected `{}`:\n\x1b[31m\x1b[01m{}\x1b[0m{}",
+    //     name, err, rest
+    // ))
+    Err(format!("Expected `{}`: {}{}", name, err, rest))
 }
 
 pub fn skip_comment(mut state: State) -> Answer<bool> {
@@ -228,9 +345,40 @@ fn parse_int(state: State) -> Answer<Expr> {
     }
 }
 
+fn parse_binop<'a>(state: State<'a>, pat: &'a str) -> Answer<'a, Option<Expr>> {
+    let (state, matched) = text(pat, state)?;
+    if matched {
+        let (state, expr2) = parse_expr(state)?;
+        Ok((state, Some(expr2)))
+    } else {
+        Ok((state, None))
+    }
+}
+
+fn get_op(op: &str) -> Op {
+    match op {
+        "+" => Op::Add,
+        "-" => Op::Sub,
+        _ => panic!("Unknown operator {}", op),
+    }
+}
+
 fn parse_expr(state: State) -> Answer<Expr> {
-    let (state, expr) = parse_int(state)?;
-    Ok((state, expr))
+    let (state, left) = parse_int(state)?;
+    for op in ["+", "-"].iter() {
+        let (state, expr) = parse_binop(state, op)?;
+        if let Some(right) = expr {
+            return Ok((
+                state,
+                Expr::BinOp {
+                    op: get_op(op),
+                    left: Box::new(left),
+                    right: Box::new(right),
+                },
+            ));
+        }
+    }
+    Ok((state, left))
 }
 
 fn parse_return_statement(state: State) -> Answer<Expr> {
@@ -240,11 +388,27 @@ fn parse_return_statement(state: State) -> Answer<Expr> {
     Ok((state, expr))
 }
 
+fn parse_paramlist<'a, 'b>(
+    args: &'b mut Vec<Arg>,
+    pat: &str,
+    state: State<'a>,
+) -> Answer<'a, &'b Vec<Arg>> {
+    let (state, matched) = text(pat, state)?;
+    if matched {
+        return Ok((state, args));
+    }
+    let (state, ty) = parse_type(state)?;
+    let (state, name) = name_here(state)?;
+    args.push(Arg { name, ty });
+    parse_paramlist(args, pat, state)
+}
+
 fn parse_function(state: State) -> Answer<Function> {
     let (state, ret_type) = parse_type(state)?;
     let (state, name) = name_here(state)?;
-    let (state, _) = consume("(", state)?; // TODO: parse args
-    let (state, _) = consume(")", state)?;
+    let (state, _) = consume("(", state)?;
+    let mut args = Vec::new();
+    let (state, _) = parse_paramlist(&mut args, ")", state)?;
     let (state, _) = consume("{", state)?;
     let (state, ret_expr) = parse_return_statement(state)?;
     let (state, _) = consume("}", state)?;
@@ -252,7 +416,7 @@ fn parse_function(state: State) -> Answer<Function> {
         ret_type,
         ret_expr,
         name,
-        args: Vec::new(),
+        args,
     };
     Ok((state, function))
 }
@@ -309,14 +473,44 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_parse() {
-        let code = "int main() { return 0; }";
+    fn test_main1(code: &str, ret_type: Type, ret_expr: Expr) {
         let program = parse(code).unwrap();
-        assert_eq!(program.functions.len(), 1);
         let function = &program.functions[0];
+        assert_eq!(program.functions.len(), 1);
         assert_eq!(function.name, "main");
-        assert_eq!(function.ret_type, Type::Int);
-        assert_eq!(function.ret_expr, Expr::Int { value: 0 });
+        assert_eq!(function.ret_type, ret_type);
+        assert_eq!(function.ret_expr, ret_expr);
+    }
+
+    #[test]
+    fn test_parse1() {
+        let code = "int main() { return 0; }";
+        let ret_type = Type::Int;
+        let ret_expr = Expr::Int { value: 0 };
+        test_main1(code, ret_type, ret_expr);
+    }
+
+    #[test]
+    fn test_parse2() {
+        let code = "int main() { return 3 + 2; }";
+        let ret_type = Type::Int;
+        let ret_expr = Expr::BinOp {
+            op: Op::Add,
+            left: Box::new(Expr::Int { value: 3 }),
+            right: Box::new(Expr::Int { value: 2 }),
+        };
+        test_main1(code, ret_type, ret_expr);
+    }
+
+    #[test]
+    fn test_prop1() {
+        fn prop1(program: Program) -> bool {
+            let code = program.deparse();
+            let parsed = parse(&code).unwrap();
+            parsed == program
+        }
+        QuickCheck::new()
+            .gen(Gen::new(1))
+            .quickcheck(prop1 as fn(Program) -> bool)
     }
 }

@@ -11,6 +11,7 @@ use llvm_sys::target::{
 };
 use llvm_sys::target_machine::*;
 
+use super::constants::*;
 use super::parser::{Expr, Function, Program, Type};
 
 fn cstr(s: &str) -> Cow<CStr> {
@@ -48,6 +49,36 @@ impl Expr {
                 let ty = unsafe { LLVMInt32TypeInContext(llvm.ctx) };
                 let val = unsafe { LLVMConstInt(ty, *value as u64, 0) };
                 Ok(val)
+            }
+            Expr::BinOp { left, right, op } => {
+                let leftval = left.codegen(llvm)?;
+                let rightval = right.codegen(llvm)?;
+                match op {
+                    Op::Add => {
+                        let val = unsafe {
+                            LLVMBuildAdd(llvm.builder, leftval, rightval, cstr("addtmp").as_ptr())
+                        };
+                        Ok(val)
+                    }
+                    Op::Sub => {
+                        let val = unsafe {
+                            LLVMBuildSub(llvm.builder, leftval, rightval, cstr("subtmp").as_ptr())
+                        };
+                        Ok(val)
+                    }
+                    Op::Mul => {
+                        let val = unsafe {
+                            LLVMBuildMul(llvm.builder, leftval, rightval, cstr("multmp").as_ptr())
+                        };
+                        Ok(val)
+                    }
+                    Op::Div => {
+                        let val = unsafe {
+                            LLVMBuildSDiv(llvm.builder, leftval, rightval, cstr("divtmp").as_ptr())
+                        };
+                        Ok(val)
+                    }
+                }
             }
         }
     }
