@@ -43,8 +43,8 @@ pub enum Expr {
         value: u32,
     },
     BinOp {
-        left: Box<Expr>,
-        right: Box<Expr>,
+        lhs: Box<Expr>,
+        rhs: Box<Expr>,
         op: Op,
     },
 }
@@ -53,8 +53,8 @@ impl Deparse for Expr {
     fn deparse(&self) -> String {
         match self {
             Expr::Int { value } => value.to_string(),
-            Expr::BinOp { left, right, op } => {
-                format!("({} {} {})", left.deparse(), op, right.deparse())
+            Expr::BinOp { lhs, rhs, op } => {
+                format!("({} {} {})", lhs.deparse(), op, rhs.deparse())
             }
         }
     }
@@ -62,13 +62,14 @@ impl Deparse for Expr {
 
 impl Arbitrary for Expr {
     fn arbitrary(g: &mut Gen) -> Self {
-        Expr::Int {
-            value: u32::arbitrary(g),
+        if u32::arbitrary(g) % 5 == 0 {
+            let op = Op::arbitrary(g);
+            let lhs = Box::new(Expr::arbitrary(g));
+            let rhs = Box::new(Expr::arbitrary(g));
+            return Expr::BinOp { lhs, rhs, op };
         }
-        // let op = Op::arbitrary(g);
-        // let left = Box::new(Expr::arbitrary(g));
-        // let right = Box::new(Expr::arbitrary(g));
-        // Expr::BinOp { left, right, op }
+        let value = u32::arbitrary(g);
+        Expr::Int { value }
     }
 }
 
@@ -130,7 +131,7 @@ impl Deparse for Program {
             .iter()
             .map(|f| f.deparse())
             .collect::<Vec<_>>()
-            .join("\n\n")
+            .join("\n")
     }
 }
 
@@ -257,31 +258,43 @@ pub fn consume<'a>(pat: &'a str, state: State<'a>) -> Answer<'a, &'a str> {
     }
 }
 
+pub fn optional_grammar<'a, A: 'a>(
+    choices: &[Parser<'a, Option<A>>],
+    state: State<'a>,
+) -> Answer<'a, Option<A>> {
+    for choice in choices {
+        let (state, result) = choice(state)?;
+        if result.is_some() {
+            return Ok((state, result));
+        }
+    }
+    Ok((state, None))
+}
+
 pub fn grammar<'a, A: 'a>(
     name: &'static str,
     choices: &[Parser<'a, Option<A>>],
     state: State<'a>,
 ) -> Answer<'a, A> {
-    for choice in choices {
-        let (state, result) = choice(state)?;
-        if let Some(value) = result {
-            return Ok((state, value));
-        }
+    let (state, result) = optional_grammar(choices, state)?;
+    if let Some(result) = result {
+        Ok((state, result))
+    } else {
+        expected(name, 1, state)
     }
-    expected(name, 1, state)
 }
 
-fn type_consumer<'a>(pat: &'static str, ty: Type, state: State<'a>) -> Answer<'a, Option<Type>> {
+fn enum_consumer<'a, A>(pat: &'static str, val: A, state: State<'a>) -> Answer<'a, Option<A>> {
     let (state, matched) = text(pat, state)?;
-    Ok((state, if matched { Some(ty) } else { None }))
+    Ok((state, if matched { Some(val) } else { None }))
 }
 
 fn parse_type(state: State) -> Answer<Type> {
     grammar(
         "type",
         &[
-            Box::new(|state| type_consumer("int", Type::Int, state)),
-            Box::new(|state| type_consumer("void", Type::Void, state)),
+            Box::new(|state| enum_consumer("int", Type::Int, state)),
+            Box::new(|state| enum_consumer("void", Type::Void, state)),
         ],
         state,
     )
@@ -340,40 +353,61 @@ fn parse_int(state: State) -> Answer<Expr> {
     }
 }
 
-fn parse_binop<'a>(state: State<'a>, pat: &'a str) -> Answer<'a, Option<Expr>> {
-    let (state, matched) = text(pat, state)?;
-    if matched {
-        let (state, expr2) = parse_expr(state)?;
-        Ok((state, Some(expr2)))
+fn parse_factor(state: State) -> Answer<Expr> {
+    let (state, is_paren) = text("(", state)?;
+    if is_paren {
+        let (state, expr) = parse_expr(state)?;
+        let (state, _) = consume(")", state)?;
+        Ok((state, expr))
     } else {
-        Ok((state, None))
+        parse_int(state)
     }
 }
 
-fn get_op(op: &str) -> Op {
-    match op {
-        "+" => Op::Add,
-        "-" => Op::Sub,
-        _ => panic!("Unknown operator {}", op),
+fn parse_term(state: State) -> Answer<Expr> {
+    let (state, lhs) = parse_factor(state)?;
+    let (state, op_option) = optional_grammar(
+        &[
+            Box::new(|state| enum_consumer("/", Op::Div, state)),
+            Box::new(|state| enum_consumer("*", Op::Mul, state)),
+        ],
+        state,
+    )?;
+    if let Some(op) = op_option {
+        let (state, rhs) = parse_term(state)?;
+        return Ok((
+            state,
+            Expr::BinOp {
+                op,
+                lhs: Box::new(lhs),
+                rhs: Box::new(rhs),
+            },
+        ));
     }
+    Ok((state, lhs))
 }
 
 fn parse_expr(state: State) -> Answer<Expr> {
-    let (state, left) = parse_int(state)?;
-    for op in ["+", "-"].iter() {
-        let (state, expr) = parse_binop(state, op)?;
-        if let Some(right) = expr {
-            return Ok((
-                state,
-                Expr::BinOp {
-                    op: get_op(op),
-                    left: Box::new(left),
-                    right: Box::new(right),
-                },
-            ));
-        }
+    let (state, lhs) = parse_term(state)?;
+    let (state, op_option) = optional_grammar(
+        &[
+            Box::new(|state| enum_consumer("-", Op::Sub, state)),
+            Box::new(|state| enum_consumer("+", Op::Add, state)),
+        ],
+        state,
+    )?;
+    if let Some(op) = op_option {
+        let (state, rhs) = parse_expr(state)?;
+        return Ok((
+            state,
+            Expr::BinOp {
+                op,
+                lhs: Box::new(lhs),
+                rhs: Box::new(rhs),
+            },
+        ));
     }
-    Ok((state, left))
+    Ok((state, lhs))
 }
 
 fn parse_return_statement(state: State) -> Answer<Expr> {
@@ -434,6 +468,7 @@ fn parse_top_level(state: State) -> Answer<Program> {
 
 // parse a string of C code
 pub fn parse(code: &str) -> Result<Program, String> {
+    println!("\nparsing\n{}", code);
     match parse_top_level(State { code, index: 0 }) {
         Ok((_, value)) => Ok(value),
         Err(msg) => Err(msg),
@@ -492,8 +527,32 @@ mod tests {
         let ret_type = Type::Int;
         let ret_expr = Expr::BinOp {
             op: Op::Add,
-            left: Box::new(Expr::Int { value: 3 }),
-            right: Box::new(Expr::Int { value: 2 }),
+            lhs: Box::new(Expr::Int { value: 3 }),
+            rhs: Box::new(Expr::Int { value: 2 }),
+        };
+        test_main1(code, ret_type, ret_expr);
+    }
+
+    #[test]
+    fn test_parse_mixed_binop1() {
+        let code = "int main() { return 3 + 2 + (5 - 7 * 10); }";
+        let ret_type = Type::Int;
+        let ret_expr = Expr::BinOp {
+            op: Op::Add,
+            lhs: Box::new(Expr::Int { value: 3 }),
+            rhs: Box::new(Expr::BinOp {
+                op: Op::Add,
+                lhs: Box::new(Expr::Int { value: 2 }),
+                rhs: Box::new(Expr::BinOp {
+                    op: Op::Sub,
+                    lhs: Box::new(Expr::Int { value: 5 }),
+                    rhs: Box::new(Expr::BinOp {
+                        op: Op::Mul,
+                        lhs: Box::new(Expr::Int { value: 7 }),
+                        rhs: Box::new(Expr::Int { value: 10 }),
+                    }),
+                }),
+            }),
         };
         test_main1(code, ret_type, ret_expr);
     }
