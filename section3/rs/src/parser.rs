@@ -234,7 +234,8 @@ pub fn skip(mut state: State) -> Answer<bool> {
     Ok((state, false))
 }
 
-pub fn text_here<'a>(pat: &str, state: State<'a>) -> Answer<'a, bool> {
+pub fn text<'a>(pat: &str, state: State<'a>) -> Answer<'a, bool> {
+    let (state, _) = skip(state)?;
     if let Some(rest) = state.rest() {
         if rest.starts_with(pat) {
             let state = State {
@@ -245,12 +246,6 @@ pub fn text_here<'a>(pat: &str, state: State<'a>) -> Answer<'a, bool> {
         }
     }
     Ok((state, false))
-}
-
-pub fn text<'a>(pat: &str, state: State<'a>) -> Answer<'a, bool> {
-    let (state, _) = skip(state)?;
-    let (state, matched) = text_here(pat, state)?;
-    Ok((state, matched))
 }
 
 pub fn consume<'a>(pat: &'a str, state: State<'a>) -> Answer<'a, &'a str> {
@@ -300,7 +295,7 @@ fn is_number(chr: char) -> bool {
     chr.is_numeric()
 }
 
-pub fn name_here(state: State) -> Answer<String> {
+pub fn name(state: State) -> Answer<String> {
     let mut name: String = String::new();
     let (mut state, _) = skip(state)?;
     while let Some(got) = head(state) {
@@ -398,14 +393,15 @@ fn parse_paramlist<'a, 'b>(
         return Ok((state, args));
     }
     let (state, ty) = parse_type(state)?;
-    let (state, name) = name_here(state)?;
+    let (state, name) = name(state)?;
+    let (state, _) = text(",", state)?;
     args.push(Arg { name, ty });
     parse_paramlist(args, pat, state)
 }
 
 fn parse_function(state: State) -> Answer<Function> {
     let (state, ret_type) = parse_type(state)?;
-    let (state, name) = name_here(state)?;
+    let (state, name) = name(state)?;
     let (state, _) = consume("(", state)?;
     let mut args = Vec::new();
     let (state, _) = parse_paramlist(&mut args, ")", state)?;
@@ -510,7 +506,7 @@ mod tests {
             parsed == program
         }
         QuickCheck::new()
-            .gen(Gen::new(1))
+            .gen(Gen::new(2))
             .quickcheck(prop1 as fn(Program) -> bool)
     }
 }
