@@ -1,4 +1,5 @@
 use super::constants::*;
+use backtrace::Backtrace;
 use quickcheck::{Arbitrary, Gen, QuickCheck};
 use rand::distributions::{Alphanumeric, DistString};
 
@@ -39,6 +40,9 @@ impl Deparse for Arg {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Expr {
+    Return {
+        expr: Box<Expr>,
+    },
     Int {
         value: u32,
     },
@@ -56,6 +60,7 @@ impl Deparse for Expr {
             Expr::BinOp { lhs, rhs, op } => {
                 format!("({} {} {})", lhs.deparse(), op, rhs.deparse())
             }
+            Expr::Return { expr } => format!("return {}", expr.deparse()),
         }
     }
 }
@@ -76,7 +81,7 @@ impl Arbitrary for Expr {
 #[derive(Clone, Debug, PartialEq)]
 pub struct Function {
     pub ret_type: Type,
-    pub ret_expr: Expr,
+    pub exprs: Vec<Expr>,
     pub name: String,
     pub args: Vec<Arg>,
 }
@@ -89,12 +94,18 @@ impl Deparse for Function {
             .map(|a| a.deparse())
             .collect::<Vec<_>>()
             .join(", ");
+        let exprs = self
+            .exprs
+            .iter()
+            .map(|e| e.deparse())
+            .collect::<Vec<_>>()
+            .join(";\n");
         format!(
-            "{} {}({}) {{ return {}; }}",
+            "{} {}({}) {{\n{} ;\n}}",
             self.ret_type.deparse(),
             self.name,
             args,
-            self.ret_expr.deparse()
+            exprs
         )
     }
 }
@@ -102,8 +113,11 @@ impl Deparse for Function {
 impl<'a> Arbitrary for Function {
     fn arbitrary(g: &mut Gen) -> Self {
         let ret_type = Type::Void;
-        let ret_expr = Expr::arbitrary(g);
         let name = readable_string(g);
+        let mut exprs = Vec::new();
+        for _ in 0..g.size() {
+            exprs.push(Expr::arbitrary(g));
+        }
         let mut args = Vec::new();
         for _ in 0..g.size() {
             args.push(Arg {
@@ -113,7 +127,7 @@ impl<'a> Arbitrary for Function {
         }
         Function {
             ret_type,
-            ret_expr,
+            exprs,
             name,
             args,
         }
@@ -183,6 +197,8 @@ pub fn expected<'a, A>(name: &str, size: usize, state: State<'a>) -> Answer<'a, 
     //     "Expected `{}`:\n\x1b[31m\x1b[01m{}\x1b[0m{}",
     //     name, err, rest
     // ))
+    let bt = Backtrace::new();
+    println!("{:?}", bt);
     Err(format!("Expected `{}`: {}{}", name, err, rest))
 }
 
@@ -410,10 +426,18 @@ fn parse_expr(state: State) -> Answer<Expr> {
     Ok((state, lhs))
 }
 
-fn parse_return_statement(state: State) -> Answer<Expr> {
-    let (state, _) = consume("return", state)?;
+fn parse_statement(state: State) -> Answer<Expr> {
+    let (state, ret) = text("return", state)?;
     let (state, expr) = parse_expr(state)?;
     let (state, _) = consume(";", state)?;
+    if ret {
+        return Ok((
+            state,
+            Expr::Return {
+                expr: Box::new(expr),
+            },
+        ));
+    }
     Ok((state, expr))
 }
 
@@ -439,12 +463,22 @@ fn parse_function(state: State) -> Answer<Function> {
     let (state, _) = consume("(", state)?;
     let mut args = Vec::new();
     let (state, _) = parse_paramlist(&mut args, ")", state)?;
-    let (state, _) = consume("{", state)?;
-    let (state, ret_expr) = parse_return_statement(state)?;
-    let (state, _) = consume("}", state)?;
+
+    let mut exprs = Vec::new();
+    let (mut state, _) = consume("{", state)?;
+    loop {
+        let expr;
+        let matched;
+        (state, matched) = text("}", state)?;
+        if matched {
+            break;
+        }
+        (state, expr) = parse_statement(state)?;
+        exprs.push(expr);
+    }
     let function = Function {
         ret_type,
-        ret_expr,
+        exprs,
         name,
         args,
     };
@@ -504,40 +538,63 @@ mod tests {
         );
     }
 
-    fn test_main1(code: &str, ret_type: Type, ret_expr: Expr) {
+    fn test_main1(code: &str, ret_type: Type, exprs: Vec<Expr>) {
         let program = parse(code).unwrap();
         let function = &program.functions[0];
         assert_eq!(program.functions.len(), 1);
         assert_eq!(function.name, "main");
         assert_eq!(function.ret_type, ret_type);
-        assert_eq!(function.ret_expr, ret_expr);
+        assert_eq!(function.exprs, exprs);
     }
 
     #[test]
     fn test_parse1() {
         let code = "int main() { return 0; }";
         let ret_type = Type::Int;
-        let ret_expr = Expr::Int { value: 0 };
-        test_main1(code, ret_type, ret_expr);
+        let ret_expr = Expr::Return {
+            expr: Box::new(Expr::Int { value: 0 }),
+        };
+        let exprs = vec![ret_expr];
+        test_main1(code, ret_type, exprs);
+    }
+
+    #[test]
+    fn test_statements1() {
+        let code = "int main() { 2 + 3; return 0; }";
+        let ret_type = Type::Int;
+        let exprs = vec![
+            Expr::BinOp {
+                op: Op::Add,
+                lhs: Box::new(Expr::Int { value: 2 }),
+                rhs: Box::new(Expr::Int { value: 3 }),
+            },
+            Expr::Return {
+                expr: Box::new(Expr::Int { value: 0 }),
+            },
+        ];
+        test_main1(code, ret_type, exprs);
     }
 
     #[test]
     fn test_parse2() {
         let code = "int main() { return 3 + 2; }";
         let ret_type = Type::Int;
-        let ret_expr = Expr::BinOp {
+        let expr = Expr::BinOp {
             op: Op::Add,
             lhs: Box::new(Expr::Int { value: 3 }),
             rhs: Box::new(Expr::Int { value: 2 }),
         };
-        test_main1(code, ret_type, ret_expr);
+        let exprs = vec![Expr::Return {
+            expr: Box::new(expr),
+        }];
+        test_main1(code, ret_type, exprs);
     }
 
     #[test]
     fn test_parse_mixed_binop1() {
         let code = "int main() { return 3 + 2 + (5 - 7 * 10); }";
         let ret_type = Type::Int;
-        let ret_expr = Expr::BinOp {
+        let expr = Expr::BinOp {
             op: Op::Add,
             lhs: Box::new(Expr::Int { value: 3 }),
             rhs: Box::new(Expr::BinOp {
@@ -554,7 +611,10 @@ mod tests {
                 }),
             }),
         };
-        test_main1(code, ret_type, ret_expr);
+        let exprs = vec![Expr::Return {
+            expr: Box::new(expr),
+        }];
+        test_main1(code, ret_type, exprs);
     }
 
     #[test]

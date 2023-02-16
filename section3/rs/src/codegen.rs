@@ -80,6 +80,11 @@ impl Expr {
                     }
                 }
             }
+            Expr::Return { expr } => {
+                let val = expr.codegen(llvm)?;
+                unsafe { LLVMBuildRet(llvm.builder, val) };
+                Ok(val)
+            }
         }
     }
 }
@@ -112,9 +117,12 @@ impl Function {
             unsafe { LLVMSetValueName2(val, name.as_ptr(), arg.name.len()) };
             llvm.named_values.insert(arg.name.clone(), val);
         }
-        let ret_val = self.ret_expr.codegen(llvm)?;
-        unsafe { LLVMBuildRet(llvm.builder, ret_val) };
-        Ok(fn_value)
+        let ret_expr = self.exprs.last(); // TODO: do this properly
+        if let Some(expr) = ret_expr {
+            expr.codegen(llvm)
+        } else {
+            Err("No return value".to_string())
+        }
     }
 }
 

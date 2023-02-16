@@ -11,3 +11,5 @@ all io is mmio, over axi, triggers waitstate, devices responsible for ending wai
 read/write, print, hello world over serial
 need ddr at this point, consider using a xilinx memory controller, might grow into a real mmu?
 talking to phy sounds hard, again consider using an off the self core, axi-stream?, connect to ddr?
+make phy write into circular buffer in ram, provide buffer pointers through mmio registers
+  initially need no interrupts, userspace can just poll registers for changes
