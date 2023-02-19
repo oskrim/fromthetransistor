@@ -1,5 +1,5 @@
-use std::fmt;
 use quickcheck::Arbitrary;
+use std::fmt;
 
 use crate::parser::Deparse;
 
@@ -23,9 +23,9 @@ impl Deparse for Op {
 }
 
 impl fmt::Display for Op {
-  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-      write!(f, "{}", self.deparse())
-  }
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.deparse())
+    }
 }
 
 impl Arbitrary for Op {

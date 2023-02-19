@@ -28,7 +28,7 @@ fn main() {
         Ok(program) => {
             println!("Parsed program: {:#?}", program);
             println!("Generated:");
-            codegen::codegen(program);
+            codegen::codegen(&program, "a.out");
         }
         Err(msg) => println!("{}", msg),
     }

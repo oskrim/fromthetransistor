@@ -1,0 +1,44 @@
+	.text
+	.syntax unified
+	.eabi_attribute	67, "2.09"
+	.eabi_attribute	6, 10
+	.eabi_attribute	7, 65
+	.eabi_attribute	8, 1
+	.eabi_attribute	9, 2
+	.fpu	neon
+	.eabi_attribute	34, 1
+	.eabi_attribute	17, 1
+	.eabi_attribute	20, 1
+	.eabi_attribute	21, 0
+	.eabi_attribute	23, 3
+	.eabi_attribute	24, 1
+	.eabi_attribute	25, 1
+	.eabi_attribute	38, 1
+	.eabi_attribute	14, 0
+	.file	"my cool jit"
+	.globl	cO
+	.p2align	2
+	.type	cO,%function
+	.code	32
+cO:
+	.fnstart
+	mov	r0, #0
+	bx	lr
+.Lfunc_end0:
+	.size	cO, .Lfunc_end0-cO
+	.fnend
+
+	.globl	Mn
+	.p2align	2
+	.type	Mn,%function
+	.code	32
+Mn:
+	.fnstart
+	mov	r0, #0
+	bx	lr
+.Lfunc_end1:
+	.size	Mn, .Lfunc_end1-Mn
+	.fnend
+
+	.section	".note.GNU-stack","",%progbits
+	.eabi_attribute	30, 1

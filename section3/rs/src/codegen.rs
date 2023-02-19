@@ -95,6 +95,7 @@ impl Function {
             Type::Int => unsafe { LLVMInt32TypeInContext(llvm.ctx) },
             Type::Void => unsafe { LLVMVoidTypeInContext(llvm.ctx) },
         };
+
         let mut arg_types = Vec::new();
         for arg in &self.args {
             let ty = match arg.ty {
@@ -103,6 +104,7 @@ impl Function {
             };
             arg_types.push(ty);
         }
+
         let fn_type = unsafe {
             LLVMFunctionType(ret_type, arg_types.as_mut_ptr(), arg_types.len() as u32, 0)
         };
@@ -111,18 +113,25 @@ impl Function {
         let bb =
             unsafe { LLVMAppendBasicBlockInContext(llvm.ctx, fn_value, cstr("entry").as_ptr()) };
         unsafe { LLVMPositionBuilderAtEnd(llvm.builder, bb) };
+
         for (i, arg) in self.args.iter().enumerate() {
             let name = cstr(&arg.name);
             let val = unsafe { LLVMGetParam(fn_value, i as u32) };
             unsafe { LLVMSetValueName2(val, name.as_ptr(), arg.name.len()) };
             llvm.named_values.insert(arg.name.clone(), val);
         }
-        let ret_expr = self.exprs.last(); // TODO: do this properly
-        if let Some(expr) = ret_expr {
-            expr.codegen(llvm)
-        } else {
-            Err("No return value".to_string())
+
+        for expr in &self.exprs {
+            let ir = Ok(expr.codegen(llvm)?);
+            match expr {
+                Expr::Return { .. } => return ir,
+                _ => {}
+            }
         }
+        let void_ret = Expr::Return {
+            expr: Box::new(Expr::Int { value: 0 }),
+        };
+        Ok(void_ret.codegen(llvm)?)
     }
 }
 
@@ -137,7 +146,7 @@ impl Program {
     }
 }
 
-pub fn codegen(program: Program) {
+pub fn codegen(program: &Program, path: &str) {
     let mut llvm = LLVM::new();
     unsafe {
         let ir = program.codegen(&mut llvm).unwrap();
@@ -176,7 +185,7 @@ pub fn codegen(program: Program) {
         );
         println!("Target machine: {:?}", target_machine);
 
-        let filename = LLVMCreateMessage(cstr("a.out").as_ptr());
+        let filename = LLVMCreateMessage(cstr(path).as_ptr());
         err_string = std::mem::MaybeUninit::uninit();
         let ok = LLVMTargetMachineEmitToFile(
             target_machine,

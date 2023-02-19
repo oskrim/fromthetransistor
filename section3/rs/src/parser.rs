@@ -502,7 +502,7 @@ fn parse_top_level(state: State) -> Answer<Program> {
 
 // parse a string of C code
 pub fn parse(code: &str) -> Result<Program, String> {
-    println!("\nparsing\n{}", code);
+    println!("\n\nparsing\n{}", code);
     match parse_top_level(State { code, index: 0 }) {
         Ok((_, value)) => Ok(value),
         Err(msg) => Err(msg),
@@ -512,6 +512,10 @@ pub fn parse(code: &str) -> Result<Program, String> {
 // tests
 #[cfg(test)]
 mod tests {
+    use std::hash::Hash;
+
+    use crate::codegen::codegen;
+
     use super::*;
 
     #[test]
@@ -538,6 +542,17 @@ mod tests {
         );
     }
 
+    fn codegen_code(code: &str, program: &Program) {
+        let hash = {
+            use std::collections::hash_map::DefaultHasher;
+            use std::hash::Hasher;
+            let mut hasher = DefaultHasher::new();
+            code.hash(&mut hasher);
+            hasher.finish()
+        };
+        codegen(program, &format!("out/{}.out", hash.to_string()));
+    }
+
     fn test_main1(code: &str, ret_type: Type, exprs: Vec<Expr>) {
         let program = parse(code).unwrap();
         let function = &program.functions[0];
@@ -545,6 +560,7 @@ mod tests {
         assert_eq!(function.name, "main");
         assert_eq!(function.ret_type, ret_type);
         assert_eq!(function.exprs, exprs);
+        codegen_code(code, &program)
     }
 
     #[test]
@@ -555,6 +571,18 @@ mod tests {
             expr: Box::new(Expr::Int { value: 0 }),
         };
         let exprs = vec![ret_expr];
+        test_main1(code, ret_type, exprs);
+    }
+
+    #[test]
+    fn test_void1() {
+        let code = "void main() { 42 + 24; }";
+        let ret_type = Type::Void;
+        let exprs = vec![Expr::BinOp {
+            op: Op::Add,
+            lhs: Box::new(Expr::Int { value: 42 }),
+            rhs: Box::new(Expr::Int { value: 24 }),
+        }];
         test_main1(code, ret_type, exprs);
     }
 
@@ -622,6 +650,7 @@ mod tests {
         fn prop1(program: Program) -> bool {
             let code = program.deparse();
             let parsed = parse(&code).unwrap();
+            codegen_code(&code, &program);
             parsed == program
         }
         QuickCheck::new()
