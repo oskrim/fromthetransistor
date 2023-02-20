@@ -395,7 +395,7 @@ fn parse_int(state: State) -> Answer<Expr> {
         let (state, src) = int_here(state)?;
         match u32::from_str_radix(&src, 10) {
             Ok(value) => Ok((state, Expr::Int { value })),
-            Err(_) => expected("hexadecimal number", src.len(), state),
+            Err(_) => expected("base10 number", src.len(), state),
         }
     }
 }
@@ -434,7 +434,7 @@ fn parse_term(state: State) -> Answer<Expr> {
     Ok((state, lhs))
 }
 
-fn parse_expr(state: State) -> Answer<Expr> {
+fn parse_additive_expr(state: State) -> Answer<Expr> {
     let (state, lhs) = parse_term(state)?;
     let (state, op_option) = optional_grammar(
         &[
@@ -455,6 +455,35 @@ fn parse_expr(state: State) -> Answer<Expr> {
         ));
     }
     Ok((state, lhs))
+}
+
+fn parse_relational_expr(state: State) -> Answer<Expr> {
+    let (state, lhs) = parse_additive_expr(state)?;
+    let (state, op_option) = optional_grammar(
+        &[
+            Box::new(|state| enum_consumer("<=", Op::Le, state)),
+            Box::new(|state| enum_consumer(">=", Op::Ge, state)),
+            Box::new(|state| enum_consumer("<", Op::Lt, state)),
+            Box::new(|state| enum_consumer(">", Op::Gt, state)),
+        ],
+        state,
+    )?;
+    if let Some(op) = op_option {
+        let (state, rhs) = parse_expr(state)?;
+        return Ok((
+            state,
+            Expr::BinOp {
+                op,
+                lhs: Box::new(lhs),
+                rhs: Box::new(rhs),
+            },
+        ));
+    }
+    Ok((state, lhs))
+}
+
+fn parse_expr(state: State) -> Answer<Expr> {
+    parse_relational_expr(state)
 }
 
 fn parse_block(state: State) -> Answer<Vec<Expr>> {
@@ -626,7 +655,9 @@ mod tests {
             code.hash(&mut hasher);
             hasher.finish()
         };
-        codegen(program, &format!("out/{}.out", hash.to_string()));
+        let file_path = format!("out/{}.out", hash.to_string());
+        println!("writing to {}", file_path);
+        codegen(program, &file_path);
     }
 
     fn test_main1(code: &str, ret_type: Type, exprs: Vec<Expr>) {
@@ -685,6 +716,26 @@ mod tests {
         let ret_type = Type::Int;
         let exprs = vec![Expr::If {
             cond: Box::new(Expr::Int { value: 1 }),
+            then: vec![Expr::Return {
+                expr: Box::new(Expr::Int { value: 0 }),
+            }],
+            otherwise: vec![Expr::Return {
+                expr: Box::new(Expr::Int { value: 1 }),
+            }],
+        }];
+        test_main1(code, ret_type, exprs);
+    }
+
+    #[test]
+    fn test_conditional2() {
+        let code = "int main() { if (2 > 1) { return 0; } else { return 1; } }";
+        let ret_type = Type::Int;
+        let exprs = vec![Expr::If {
+            cond: Box::new(Expr::BinOp {
+                op: Op::Gt,
+                lhs: Box::new(Expr::Int { value: 2 }),
+                rhs: Box::new(Expr::Int { value: 1 }),
+            }),
             then: vec![Expr::Return {
                 expr: Box::new(Expr::Int { value: 0 }),
             }],

@@ -10,6 +10,7 @@ use llvm_sys::target::{
     LLVM_InitializeAllTargetMCs, LLVM_InitializeAllTargets,
 };
 use llvm_sys::target_machine::*;
+use llvm_sys::LLVMIntPredicate::*;
 
 use super::constants::*;
 use super::parser::{Expr, Function, Program, Type};
@@ -75,6 +76,54 @@ impl Expr {
                     Op::Div => {
                         let val = unsafe {
                             LLVMBuildSDiv(llvm.builder, lhsval, rhsval, cstr("divtmp").as_ptr())
+                        };
+                        Ok(val)
+                    }
+                    Op::Le => {
+                        let val = unsafe {
+                            LLVMBuildICmp(
+                                llvm.builder,
+                                LLVMIntSLE,
+                                lhsval,
+                                rhsval,
+                                cstr("cmptmp").as_ptr(),
+                            )
+                        };
+                        Ok(val)
+                    }
+                    Op::Ge => {
+                        let val = unsafe {
+                            LLVMBuildICmp(
+                                llvm.builder,
+                                LLVMIntSGE,
+                                lhsval,
+                                rhsval,
+                                cstr("cmptmp").as_ptr(),
+                            )
+                        };
+                        Ok(val)
+                    }
+                    Op::Lt => {
+                        let val = unsafe {
+                            LLVMBuildICmp(
+                                llvm.builder,
+                                LLVMIntSLT,
+                                lhsval,
+                                rhsval,
+                                cstr("cmptmp").as_ptr(),
+                            )
+                        };
+                        Ok(val)
+                    }
+                    Op::Gt => {
+                        let val = unsafe {
+                            LLVMBuildICmp(
+                                llvm.builder,
+                                LLVMIntSGT,
+                                lhsval,
+                                rhsval,
+                                cstr("cmptmp").as_ptr(),
+                            )
                         };
                         Ok(val)
                     }
