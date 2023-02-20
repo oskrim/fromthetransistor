@@ -461,7 +461,6 @@ fn parse_relational_expr(state: State) -> Answer<Expr> {
     let (state, lhs) = parse_additive_expr(state)?;
     let (state, op_option) = optional_grammar(
         &[
-            Box::new(|state| enum_consumer("==", Op::Eq, state)),
             Box::new(|state| enum_consumer("<=", Op::Le, state)),
             Box::new(|state| enum_consumer(">=", Op::Ge, state)),
             Box::new(|state| enum_consumer("<", Op::Lt, state)),
