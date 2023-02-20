@@ -461,6 +461,7 @@ fn parse_relational_expr(state: State) -> Answer<Expr> {
     let (state, lhs) = parse_additive_expr(state)?;
     let (state, op_option) = optional_grammar(
         &[
+            Box::new(|state| enum_consumer("==", Op::Eq, state)),
             Box::new(|state| enum_consumer("<=", Op::Le, state)),
             Box::new(|state| enum_consumer(">=", Op::Ge, state)),
             Box::new(|state| enum_consumer("<", Op::Lt, state)),
@@ -482,8 +483,34 @@ fn parse_relational_expr(state: State) -> Answer<Expr> {
     Ok((state, lhs))
 }
 
+fn parse_assignment_expr(state: State) -> Answer<Expr> {
+    let (state, lhs) = parse_relational_expr(state)?;
+    let (state, op_option) = optional_grammar(
+        &[
+            Box::new(|state| enum_consumer("=", Op::Assign, state)),
+            Box::new(|state| enum_consumer("+=", Op::AddAssign, state)),
+            Box::new(|state| enum_consumer("-=", Op::SubAssign, state)),
+            Box::new(|state| enum_consumer("*=", Op::MulAssign, state)),
+            Box::new(|state| enum_consumer("/=", Op::DivAssign, state)),
+        ],
+        state,
+    )?;
+    if let Some(op) = op_option {
+        let (state, rhs) = parse_expr(state)?;
+        return Ok((
+            state,
+            Expr::BinOp {
+                op,
+                lhs: Box::new(lhs),
+                rhs: Box::new(rhs),
+            },
+        ));
+    }
+    Ok((state, lhs))
+}
+
 fn parse_expr(state: State) -> Answer<Expr> {
-    parse_relational_expr(state)
+    parse_assignment_expr(state)
 }
 
 fn parse_block(state: State) -> Answer<Vec<Expr>> {

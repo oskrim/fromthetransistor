@@ -9,10 +9,16 @@ pub enum Op {
     Sub,
     Mul,
     Div,
+    Eq,
     Le,
     Ge,
     Lt,
     Gt,
+    Assign,
+    AddAssign,
+    SubAssign,
+    MulAssign,
+    DivAssign,
 }
 
 impl Deparse for Op {
@@ -22,10 +28,16 @@ impl Deparse for Op {
             Op::Sub => "-".to_string(),
             Op::Mul => "*".to_string(),
             Op::Div => "/".to_string(),
+            Op::Eq => "==".to_string(),
             Op::Le => "<=".to_string(),
             Op::Ge => ">=".to_string(),
             Op::Lt => "<".to_string(),
             Op::Gt => ">".to_string(),
+            Op::Assign => "=".to_string(),
+            Op::AddAssign => "+=".to_string(),
+            Op::SubAssign => "-=".to_string(),
+            Op::MulAssign => "*=".to_string(),
+            Op::DivAssign => "/=".to_string(),
         }
     }
 }
@@ -43,10 +55,16 @@ impl Arbitrary for Op {
             1 => Op::Sub,
             2 => Op::Mul,
             3 => Op::Div,
-            4 => Op::Le,
-            5 => Op::Ge,
-            6 => Op::Lt,
-            7 => Op::Gt,
+            4 => Op::Eq,
+            5 => Op::Le,
+            6 => Op::Ge,
+            7 => Op::Lt,
+            8 => Op::Gt,
+            9 => Op::Assign,
+            10 => Op::AddAssign,
+            11 => Op::SubAssign,
+            12 => Op::MulAssign,
+            13 => Op::DivAssign,
             _ => unreachable!(),
         }
     }

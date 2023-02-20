@@ -127,6 +127,23 @@ impl Expr {
                         };
                         Ok(val)
                     }
+                    Op::Eq => {
+                        let val = unsafe {
+                            LLVMBuildICmp(
+                                llvm.builder,
+                                LLVMIntEQ,
+                                lhsval,
+                                rhsval,
+                                cstr("cmptmp").as_ptr(),
+                            )
+                        };
+                        Ok(val)
+                    }
+                    Op::Assign => {
+                        let val = unsafe { LLVMBuildStore(llvm.builder, lhsval, rhsval) };
+                        Ok(val)
+                    }
+                    _ => Err(format!("unimplemented op: {:?}", op)),
                 }
             }
             Expr::Return { expr } => {
