@@ -1,6 +1,0 @@
-4.12
-* uart download
-* mov
-* str
-* uart mmio tx
-add 0x41 + 1, then recv 0x42
