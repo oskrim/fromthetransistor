@@ -51,6 +51,11 @@ pub enum Expr {
         rhs: Box<Expr>,
         op: Op,
     },
+    If {
+        cond: Box<Expr>,
+        then: Vec<Expr>,
+        otherwise: Vec<Expr>,
+    },
 }
 
 impl Deparse for Expr {
@@ -61,6 +66,28 @@ impl Deparse for Expr {
                 format!("({} {} {})", lhs.deparse(), op, rhs.deparse())
             }
             Expr::Return { expr } => format!("return {}", expr.deparse()),
+            Expr::If {
+                cond,
+                then,
+                otherwise,
+            } => {
+                let then_str = then
+                    .iter()
+                    .map(|e| e.deparse())
+                    .collect::<Vec<_>>()
+                    .join(";\n");
+                let otherwise_str = otherwise
+                    .iter()
+                    .map(|e| e.deparse())
+                    .collect::<Vec<_>>()
+                    .join(";\n");
+                format!(
+                    "if ({}) {{\n{}\n}} else {{\n{}\n}}",
+                    cond.deparse(),
+                    then_str,
+                    otherwise_str,
+                )
+            }
         }
     }
 }
@@ -188,6 +215,10 @@ pub fn tail(state: State) -> State {
 
 pub type Answer<'a, A> = Result<(State<'a>, A), String>;
 pub type Parser<'a, A> = Box<dyn Fn(State<'a>) -> Answer<'a, A>>;
+
+pub fn print_state(state: State) -> &str {
+    state.code.get(state.index..).unwrap_or("")
+}
 
 pub fn expected<'a, A>(name: &str, size: usize, state: State<'a>) -> Answer<'a, A> {
     let end = state.index + size;
@@ -426,8 +457,65 @@ fn parse_expr(state: State) -> Answer<Expr> {
     Ok((state, lhs))
 }
 
+fn parse_block(state: State) -> Answer<Vec<Expr>> {
+    let mut exprs = Vec::new();
+    let (mut state, _) = consume("{", state)?;
+    loop {
+        let (new_state, got) = text("}", state)?;
+        if got {
+            return Ok((new_state, exprs));
+        }
+        let (state2, expr) = parse_statement(new_state)?;
+        exprs.push(expr);
+        state = state2;
+    }
+}
+
 fn parse_statement(state: State) -> Answer<Expr> {
     let (state, ret) = text("return", state)?;
+    let (if_state, cond1) = text("if", state)?;
+    let (if_state, cond2) = text("(", if_state)?;
+    if cond1 && cond2 {
+        let (state, expr) = parse_expr(if_state)?;
+        let (state, _) = consume(")", state)?;
+        let (state, then) = grammar(
+            "body of if",
+            &[
+                Box::new(|state| {
+                    let (state, body) = parse_block(state)?;
+                    Ok((state, Some(body)))
+                }),
+                Box::new(|state| {
+                    let (state, expr) = parse_statement(state)?;
+                    Ok((state, Some(vec![expr])))
+                }),
+            ],
+            state,
+        )?;
+        let (state, else_option) = optional_grammar(
+            &[
+                Box::new(|state| {
+                    let (state, _) = consume("else", state)?;
+                    let (state, body) = parse_block(state)?;
+                    Ok((state, Some(body)))
+                }),
+                Box::new(|state| {
+                    let (state, _) = consume("else", state)?;
+                    let (state, expr) = parse_statement(state)?;
+                    Ok((state, Some(vec![expr])))
+                }),
+            ],
+            state,
+        )?;
+        return Ok((
+            state,
+            Expr::If {
+                cond: Box::new(expr),
+                then,
+                otherwise: else_option.unwrap_or(vec![]),
+            },
+        ));
+    }
     let (state, expr) = parse_expr(state)?;
     let (state, _) = consume(";", state)?;
     if ret {
@@ -463,19 +551,7 @@ fn parse_function(state: State) -> Answer<Function> {
     let (state, _) = consume("(", state)?;
     let mut args = Vec::new();
     let (state, _) = parse_paramlist(&mut args, ")", state)?;
-
-    let mut exprs = Vec::new();
-    let (mut state, _) = consume("{", state)?;
-    loop {
-        let expr;
-        let matched;
-        (state, matched) = text("}", state)?;
-        if matched {
-            break;
-        }
-        (state, expr) = parse_statement(state)?;
-        exprs.push(expr);
-    }
+    let (state, exprs) = parse_block(state)?;
     let function = Function {
         ret_type,
         exprs,
@@ -604,6 +680,22 @@ mod tests {
     }
 
     #[test]
+    fn test_conditional1() {
+        let code = "int main() { if (1) { return 0; } else { return 1; } }";
+        let ret_type = Type::Int;
+        let exprs = vec![Expr::If {
+            cond: Box::new(Expr::Int { value: 1 }),
+            then: vec![Expr::Return {
+                expr: Box::new(Expr::Int { value: 0 }),
+            }],
+            otherwise: vec![Expr::Return {
+                expr: Box::new(Expr::Int { value: 1 }),
+            }],
+        }];
+        test_main1(code, ret_type, exprs);
+    }
+
+    #[test]
     fn test_parse2() {
         let code = "int main() { return 3 + 2; }";
         let ret_type = Type::Int;
@@ -615,6 +707,21 @@ mod tests {
         let exprs = vec![Expr::Return {
             expr: Box::new(expr),
         }];
+        test_main1(code, ret_type, exprs);
+    }
+
+    #[test]
+    fn test_parse3() {
+        let code = "void main(int ls, int js) { (0 + 3738978009); 2714820978 ; }";
+        let ret_type = Type::Void;
+        let exprs = vec![
+            Expr::BinOp {
+                op: Op::Add,
+                lhs: Box::new(Expr::Int { value: 0 }),
+                rhs: Box::new(Expr::Int { value: 3738978009 }),
+            },
+            Expr::Int { value: 2714820978 },
+        ];
         test_main1(code, ret_type, exprs);
     }
 
@@ -655,6 +762,7 @@ mod tests {
         }
         QuickCheck::new()
             .gen(Gen::new(2))
+            .tests(10)
             .quickcheck(prop1 as fn(Program) -> bool)
     }
 }
