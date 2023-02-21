@@ -220,7 +220,7 @@ pub fn print_state(state: State) -> &str {
     state.code.get(state.index..).unwrap_or("")
 }
 
-pub fn expected<'a, A>(name: &str, size: usize, state: State<'a>) -> Answer<'a, A> {
+pub fn expected<'a, A>(state: State<'a>, name: &str, size: usize) -> Answer<'a, A> {
     let end = state.index + size;
     let err = state.code.get(state.index..end).unwrap_or("");
     let rest = state.code.get(end..).unwrap_or("");
@@ -301,7 +301,7 @@ pub fn consume<'a>(pat: &'a str, state: State<'a>) -> Answer<'a, &'a str> {
     if matched {
         Ok((state, pat))
     } else {
-        expected(pat, pat.len(), state)
+        expected(state, pat, pat.len())
     }
 }
 
@@ -327,7 +327,7 @@ pub fn grammar<'a, A: 'a>(
     if let Some(result) = result {
         Ok((state, result))
     } else {
-        expected(name, 1, state)
+        expected(state, name, 1)
     }
 }
 
@@ -389,13 +389,13 @@ fn parse_int(state: State) -> Answer<Expr> {
         let (state, src) = int_here(state)?;
         match u32::from_str_radix(&src, 16) {
             Ok(value) => Ok((state, Expr::Int { value })),
-            Err(_) => expected("hexadecimal number", src.len(), state),
+            Err(_) => expected(state, "hexadecimal number", src.len()),
         }
     } else {
         let (state, src) = int_here(state)?;
         match u32::from_str_radix(&src, 10) {
             Ok(value) => Ok((state, Expr::Int { value })),
-            Err(_) => expected("base10 number", src.len(), state),
+            Err(_) => expected(state, "base10 number", src.len()),
         }
     }
 }
