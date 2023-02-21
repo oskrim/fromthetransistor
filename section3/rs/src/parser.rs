@@ -56,6 +56,11 @@ pub enum Expr {
         then: Vec<Expr>,
         otherwise: Vec<Expr>,
     },
+    Decl {
+        ty: Type,
+        name: String,
+        init: Option<Box<Expr>>,
+    },
 }
 
 impl Deparse for Expr {
@@ -88,6 +93,16 @@ impl Deparse for Expr {
                     otherwise_str,
                 )
             }
+            Expr::Decl {
+                ty,
+                name,
+                init: Some(init),
+            } => format!("{} {} = {}", ty.deparse(), name, init.deparse()),
+            Expr::Decl {
+                ty,
+                name,
+                init: None,
+            } => format!("{} {}", ty.deparse(), name),
         }
     }
 }
@@ -213,7 +228,7 @@ pub fn tail(state: State) -> State {
     }
 }
 
-pub type Answer<'a, A> = Result<(State<'a>, A), String>;
+pub type Answer<'a, A> = Result<(State<'a>, A), (String, Backtrace)>;
 pub type Parser<'a, A> = Box<dyn Fn(State<'a>) -> Answer<'a, A>>;
 
 pub fn print_state(state: State) -> &str {
@@ -229,8 +244,7 @@ pub fn expected<'a, A>(state: State<'a>, name: &str, size: usize) -> Answer<'a, 
     //     name, err, rest
     // ))
     let bt = Backtrace::new();
-    let bt_str = format!("{:?}", bt);
-    Err(format!("Expected `{}`: {}{}\n{}", name, err, rest, bt_str))
+    Err((format!("Expected `{}`: {}{}", name, err, rest), bt))
 }
 
 pub fn skip_comment(mut state: State) -> Answer<bool> {
@@ -526,6 +540,40 @@ fn parse_compound_statement(state: State) -> Answer<Vec<Expr>> {
     }
 }
 
+fn try_parser<'a>(parser: fn(State) -> Answer<Expr>, state: State<'a>) -> Answer<'a, Option<Expr>> {
+    match parser(state) {
+        Ok((state, expr)) => Ok((state, Some(expr))),
+        Err(_) => Ok((state, None)),
+    }
+}
+
+fn parse_declaration_statement(state: State) -> Answer<Expr> {
+    let (state, ty) = parse_type(state)?;
+    let (state, identifier) = name(state)?;
+    let (state, has_init) = text(state, "=")?;
+    if !has_init {
+        let (state, _) = consume(state, ";")?;
+        return Ok((
+            state,
+            Expr::Decl {
+                ty,
+                name: identifier,
+                init: None,
+            },
+        ));
+    }
+    let (state, expr) = parse_expr(state)?;
+    let (state, _) = consume(state, ";")?;
+    Ok((
+        state,
+        Expr::Decl {
+            ty,
+            name: identifier,
+            init: Some(Box::new(expr)),
+        },
+    ))
+}
+
 fn parse_selection_statement(state: State) -> Answer<Expr> {
     let (state, _) = consume(state, "if")?;
     let (state, _) = consume(state, "(")?;
@@ -570,7 +618,7 @@ fn parse_selection_statement(state: State) -> Answer<Expr> {
     ));
 }
 
-fn parse_return_expr(state: State) -> Answer<Expr> {
+fn parse_return_statement(state: State) -> Answer<Expr> {
     let (state, ret) = text(state, "return")?;
     let (state, expr) = parse_expr(state)?;
     let (state, _) = consume(state, ";")?;
@@ -585,19 +633,13 @@ fn parse_return_expr(state: State) -> Answer<Expr> {
     Ok((state, expr))
 }
 
-fn try_parser<'a>(parser: fn(State) -> Answer<Expr>, state: State<'a>) -> Answer<'a, Option<Expr>> {
-    match parser(state) {
-        Ok((state, expr)) => Ok((state, Some(expr))),
-        Err(_) => Ok((state, None)),
-    }
-}
-
 fn parse_statement(state: State) -> Answer<Expr> {
     grammar(
         "type",
         &[
+            Box::new(|state| try_parser(parse_declaration_statement, state)),
             Box::new(|state| try_parser(parse_selection_statement, state)),
-            Box::new(|state| try_parser(parse_return_expr, state)),
+            Box::new(|state| try_parser(parse_return_statement, state)),
         ],
         state,
     )
@@ -655,7 +697,10 @@ pub fn parse(code: &str) -> Result<Program, String> {
     println!("\n\nparsing\n{}", code);
     match parse_top_level(State { code, index: 0 }) {
         Ok((_, value)) => Ok(value),
-        Err(msg) => Err(msg),
+        Err((msg, bt)) => {
+            println!("{:?}", bt);
+            Err(msg)
+        }
     }
 }
 
@@ -817,6 +862,48 @@ mod tests {
                 rhs: Box::new(Expr::Int { value: 3738978009 }),
             },
             Expr::Int { value: 2714820978 },
+        ];
+        test_main1(code, ret_type, exprs);
+    }
+
+    #[test]
+    fn test_decl1() {
+        let code = "int main() { int a; }";
+        let ret_type = Type::Int;
+        let exprs = vec![Expr::Decl {
+            ty: Type::Int,
+            name: "a".to_string(),
+            init: None,
+        }];
+        test_main1(code, ret_type, exprs);
+    }
+
+    #[test]
+    fn test_decl2() {
+        let code = "int main() { int a = 2; int b = 3 + 2; return 1 + 2; }";
+        let ret_type = Type::Int;
+        let exprs = vec![
+            Expr::Decl {
+                ty: Type::Int,
+                name: "a".to_string(),
+                init: Some(Box::new(Expr::Int { value: 2 })),
+            },
+            Expr::Decl {
+                ty: Type::Int,
+                name: "b".to_string(),
+                init: Some(Box::new(Expr::BinOp {
+                    op: Op::Add,
+                    lhs: Box::new(Expr::Int { value: 3 }),
+                    rhs: Box::new(Expr::Int { value: 2 }),
+                })),
+            },
+            Expr::Return {
+                expr: Box::new(Expr::BinOp {
+                    op: Op::Add,
+                    lhs: Box::new(Expr::Int { value: 1 }),
+                    rhs: Box::new(Expr::Int { value: 2 }),
+                }),
+            },
         ];
         test_main1(code, ret_type, exprs);
     }

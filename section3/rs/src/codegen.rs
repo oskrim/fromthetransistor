@@ -202,6 +202,16 @@ impl Expr {
                 };
                 Ok(phi)
             }
+            Expr::Decl { ty, name, init } => {
+                let ty = match ty {
+                    Type::Int => unsafe { LLVMInt32TypeInContext(llvm.ctx) },
+                    Type::Void => unsafe { LLVMVoidTypeInContext(llvm.ctx) },
+                };
+                let val = unsafe { LLVMBuildAlloca(llvm.builder, ty, cstr(name).as_ptr()) };
+                // let init_val = init.codegen(llvm, func)?;
+                // unsafe { LLVMBuildStore(llvm.builder, init_val, val) };
+                Ok(val)
+            }
         }
     }
 }
