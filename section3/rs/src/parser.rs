@@ -57,7 +57,6 @@ pub enum Expr {
         otherwise: Vec<Expr>,
     },
     Var {
-        ty: Type,
         name: String,
     },
     Decl {
@@ -114,7 +113,7 @@ impl Deparse for Expr {
             Expr::Assign { name, rhs } => {
                 format!("{} = {}", name, rhs.deparse())
             }
-            Expr::Var { ty: _, name } => format!("{}", name),
+            Expr::Var { name } => format!("{}", name),
         }
     }
 }
@@ -426,6 +425,22 @@ fn parse_int(state: State) -> Answer<Expr> {
     }
 }
 
+fn parse_var(state: State) -> Answer<Expr> {
+    let (state, name) = name(state)?;
+    Ok((state, Expr::Var { name }))
+}
+
+fn parse_primary_expr(state: State) -> Answer<Expr> {
+    grammar(
+        "primary",
+        &[
+            Box::new(|state| try_parser(parse_int, state)),
+            Box::new(|state| try_parser(parse_var, state)),
+        ],
+        state,
+    )
+}
+
 fn parse_factor(state: State) -> Answer<Expr> {
     let (state, is_paren) = text(state, "(")?;
     if is_paren {
@@ -433,7 +448,7 @@ fn parse_factor(state: State) -> Answer<Expr> {
         let (state, _) = consume(state, ")")?;
         Ok((state, expr))
     } else {
-        parse_int(state)
+        parse_primary_expr(state)
     }
 }
 
@@ -470,7 +485,7 @@ fn parse_additive_expr(state: State) -> Answer<Expr> {
         state,
     )?;
     if let Some(op) = op_option {
-        let (state, rhs) = parse_expr(state)?;
+        let (state, rhs) = parse_additive_expr(state)?;
         return Ok((
             state,
             Expr::BinOp {
@@ -495,7 +510,7 @@ fn parse_relational_expr(state: State) -> Answer<Expr> {
         state,
     )?;
     if let Some(op) = op_option {
-        let (state, rhs) = parse_expr(state)?;
+        let (state, rhs) = parse_relational_expr(state)?;
         return Ok((
             state,
             Expr::BinOp {
@@ -508,24 +523,55 @@ fn parse_relational_expr(state: State) -> Answer<Expr> {
     Ok((state, lhs))
 }
 
-fn parse_conditional_expr(state: State) -> Answer<Expr> {
+fn parse_equality_expr(state: State) -> Answer<Expr> {
     let (state, lhs) = parse_relational_expr(state)?;
     let (state, op_option) = optional_grammar(
         &[
-            Box::new(|state| enum_consumer(state, "=", Op::Assign)),
-            Box::new(|state| enum_consumer(state, "+=", Op::AddAssign)),
-            Box::new(|state| enum_consumer(state, "-=", Op::SubAssign)),
-            Box::new(|state| enum_consumer(state, "*=", Op::MulAssign)),
-            Box::new(|state| enum_consumer(state, "/=", Op::DivAssign)),
+            Box::new(|state| enum_consumer(state, "==", Op::Eq)),
+            Box::new(|state| enum_consumer(state, "!=", Op::Ne)),
         ],
         state,
     )?;
     if let Some(op) = op_option {
-        let (state, rhs) = parse_expr(state)?;
+        let (state, rhs) = parse_equality_expr(state)?;
         return Ok((
             state,
             Expr::BinOp {
                 op,
+                lhs: Box::new(lhs),
+                rhs: Box::new(rhs),
+            },
+        ));
+    }
+    Ok((state, lhs))
+}
+
+fn parse_logical_and_expr(state: State) -> Answer<Expr> {
+    let (state, lhs) = parse_equality_expr(state)?;
+    let (state, and_op) = text(state, "&&")?;
+    if and_op {
+        let (state, rhs) = parse_logical_and_expr(state)?;
+        return Ok((
+            state,
+            Expr::BinOp {
+                op: Op::And,
+                lhs: Box::new(lhs),
+                rhs: Box::new(rhs),
+            },
+        ));
+    }
+    Ok((state, lhs))
+}
+
+fn parse_logical_or_expr(state: State) -> Answer<Expr> {
+    let (state, lhs) = parse_logical_and_expr(state)?;
+    let (state, or_op) = text(state, "||")?;
+    if or_op {
+        let (state, rhs) = parse_logical_or_expr(state)?;
+        return Ok((
+            state,
+            Expr::BinOp {
+                op: Op::Or,
                 lhs: Box::new(lhs),
                 rhs: Box::new(rhs),
             },
@@ -537,7 +583,7 @@ fn parse_conditional_expr(state: State) -> Answer<Expr> {
 fn parse_assignment_expr(state: State) -> Answer<Expr> {
     let (state, identifier) = name(state)?;
     let (state, _) = consume(state, "=")?;
-    let (state, expr) = parse_expr(state)?;
+    let (state, expr) = parse_logical_or_expr(state)?;
     Ok((
         state,
         Expr::Assign {
@@ -552,7 +598,7 @@ fn parse_expr(state: State) -> Answer<Expr> {
         "expr",
         &[
             Box::new(|state| try_parser(parse_assignment_expr, state)),
-            Box::new(|state| try_parser(parse_conditional_expr, state)),
+            Box::new(|state| try_parser(parse_logical_or_expr, state)),
         ],
         state,
     )
@@ -667,7 +713,7 @@ fn parse_return_statement(state: State) -> Answer<Expr> {
 
 fn parse_statement(state: State) -> Answer<Expr> {
     grammar(
-        "type",
+        "statement",
         &[
             Box::new(|state| try_parser(parse_return_statement, state)),
             Box::new(|state| try_parser(parse_declaration_statement, state)),
@@ -1001,6 +1047,78 @@ mod tests {
         };
         let exprs = vec![Expr::Return {
             expr: Box::new(expr),
+        }];
+        test_main1(code, ret_type, exprs);
+    }
+
+    #[test]
+    #[should_panic(expected = "unimplemented op: Or")] // TODO: Implement codegen for Or
+    fn test_binop_prec1() {
+        let code = "int main() { return 3 + 2 && (9 || 2); }";
+        let ret_type = Type::Int;
+        let exprs = vec![Expr::Return {
+            expr: Box::new(Expr::BinOp {
+                op: Op::And,
+                lhs: Box::new(Expr::BinOp {
+                    op: Op::Add,
+                    lhs: Box::new(Expr::Int { value: 3 }),
+                    rhs: Box::new(Expr::Int { value: 2 }),
+                }),
+                rhs: Box::new(Expr::BinOp {
+                    op: Op::Or,
+                    lhs: Box::new(Expr::Int { value: 9 }),
+                    rhs: Box::new(Expr::Int { value: 2 }),
+                }),
+            }),
+        }];
+        test_main1(code, ret_type, exprs);
+    }
+
+    #[test]
+    #[should_panic(expected = "no entry found for key")] // TODO: Implement variable lookup codegen
+    fn test_binop_prec2() {
+        let code = "int main() { return 3 + 2 && (9 || 2 < a * 5 >= 8) && 7 || 5 > 23; }";
+        let ret_type = Type::Int;
+        let exprs = vec![Expr::Return {
+            expr: Box::new(Expr::BinOp {
+                op: Op::Or,
+                lhs: Box::new(Expr::BinOp {
+                    op: Op::And,
+                    lhs: Box::new(Expr::BinOp {
+                        op: Op::Add,
+                        lhs: Box::new(Expr::Int { value: 3 }),
+                        rhs: Box::new(Expr::Int { value: 2 }),
+                    }),
+                    rhs: Box::new(Expr::BinOp {
+                        op: Op::And,
+                        lhs: Box::new(Expr::BinOp {
+                            op: Op::Or,
+                            lhs: Box::new(Expr::Int { value: 9 }),
+                            rhs: Box::new(Expr::BinOp {
+                                op: Op::Lt,
+                                lhs: Box::new(Expr::Int { value: 2 }),
+                                rhs: Box::new(Expr::BinOp {
+                                    op: Op::Ge,
+                                    lhs: Box::new(Expr::BinOp {
+                                        op: Op::Mul,
+                                        lhs: Box::new(Expr::Var {
+                                            name: "a".to_string(),
+                                        }),
+                                        rhs: Box::new(Expr::Int { value: 5 }),
+                                    }),
+                                    rhs: Box::new(Expr::Int { value: 8 }),
+                                }),
+                            }),
+                        }),
+                        rhs: Box::new(Expr::Int { value: 7 }),
+                    }),
+                }),
+                rhs: Box::new(Expr::BinOp {
+                    op: Op::Gt,
+                    lhs: Box::new(Expr::Int { value: 5 }),
+                    rhs: Box::new(Expr::Int { value: 23 }),
+                }),
+            }),
         }];
         test_main1(code, ret_type, exprs);
     }

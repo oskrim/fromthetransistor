@@ -219,7 +219,7 @@ impl Expr {
                 // unsafe { LLVMBuildStore(llvm.builder, init_val, val) };
                 Ok(val)
             }
-            Expr::Var { ty: _, name } => {
+            Expr::Var { name } => {
                 let val =
                     unsafe { LLVMBuildLoad(llvm.builder, scope.locals[name], cstr(name).as_ptr()) };
                 Ok(val)
