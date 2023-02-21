@@ -229,8 +229,8 @@ pub fn expected<'a, A>(state: State<'a>, name: &str, size: usize) -> Answer<'a, 
     //     name, err, rest
     // ))
     let bt = Backtrace::new();
-    println!("{:?}", bt);
-    Err(format!("Expected `{}`: {}{}", name, err, rest))
+    let bt_str = format!("{:?}", bt);
+    Err(format!("Expected `{}`: {}{}\n{}", name, err, rest, bt_str))
 }
 
 pub fn skip_comment(mut state: State) -> Answer<bool> {
@@ -526,51 +526,52 @@ fn parse_compound_statement(state: State) -> Answer<Vec<Expr>> {
     }
 }
 
-fn parse_statement(state: State) -> Answer<Expr> {
+fn parse_selection_statement(state: State) -> Answer<Expr> {
+    let (state, _) = consume(state, "if")?;
+    let (state, _) = consume(state, "(")?;
+    let (state, expr) = parse_expr(state)?;
+    let (state, _) = consume(state, ")")?;
+    let (state, then) = grammar(
+        "body of if",
+        &[
+            Box::new(|state| {
+                let (state, body) = parse_compound_statement(state)?;
+                Ok((state, Some(body)))
+            }),
+            Box::new(|state| {
+                let (state, expr) = parse_statement(state)?;
+                Ok((state, Some(vec![expr])))
+            }),
+        ],
+        state,
+    )?;
+    let (state, else_option) = optional_grammar(
+        &[
+            Box::new(|state| {
+                let (state, _) = consume(state, "else")?;
+                let (state, body) = parse_compound_statement(state)?;
+                Ok((state, Some(body)))
+            }),
+            Box::new(|state| {
+                let (state, _) = consume(state, "else")?;
+                let (state, expr) = parse_statement(state)?;
+                Ok((state, Some(vec![expr])))
+            }),
+        ],
+        state,
+    )?;
+    return Ok((
+        state,
+        Expr::If {
+            cond: Box::new(expr),
+            then,
+            otherwise: else_option.unwrap_or(vec![]),
+        },
+    ));
+}
+
+fn parse_return_expr(state: State) -> Answer<Expr> {
     let (state, ret) = text(state, "return")?;
-    let (if_state, cond1) = text(state, "if")?;
-    let (if_state, cond2) = text(if_state, "(")?;
-    if cond1 && cond2 {
-        let (state, expr) = parse_expr(if_state)?;
-        let (state, _) = consume(state, ")")?;
-        let (state, then) = grammar(
-            "body of if",
-            &[
-                Box::new(|state| {
-                    let (state, body) = parse_compound_statement(state)?;
-                    Ok((state, Some(body)))
-                }),
-                Box::new(|state| {
-                    let (state, expr) = parse_statement(state)?;
-                    Ok((state, Some(vec![expr])))
-                }),
-            ],
-            state,
-        )?;
-        let (state, else_option) = optional_grammar(
-            &[
-                Box::new(|state| {
-                    let (state, _) = consume(state, "else")?;
-                    let (state, body) = parse_compound_statement(state)?;
-                    Ok((state, Some(body)))
-                }),
-                Box::new(|state| {
-                    let (state, _) = consume(state, "else")?;
-                    let (state, expr) = parse_statement(state)?;
-                    Ok((state, Some(vec![expr])))
-                }),
-            ],
-            state,
-        )?;
-        return Ok((
-            state,
-            Expr::If {
-                cond: Box::new(expr),
-                then,
-                otherwise: else_option.unwrap_or(vec![]),
-            },
-        ));
-    }
     let (state, expr) = parse_expr(state)?;
     let (state, _) = consume(state, ";")?;
     if ret {
@@ -582,6 +583,24 @@ fn parse_statement(state: State) -> Answer<Expr> {
         ));
     }
     Ok((state, expr))
+}
+
+fn try_parser<'a>(parser: fn(State) -> Answer<Expr>, state: State<'a>) -> Answer<'a, Option<Expr>> {
+    match parser(state) {
+        Ok((state, expr)) => Ok((state, Some(expr))),
+        Err(_) => Ok((state, None)),
+    }
+}
+
+fn parse_statement(state: State) -> Answer<Expr> {
+    grammar(
+        "type",
+        &[
+            Box::new(|state| try_parser(parse_selection_statement, state)),
+            Box::new(|state| try_parser(parse_return_expr, state)),
+        ],
+        state,
+    )
 }
 
 fn parse_paramlist<'a, 'b>(
