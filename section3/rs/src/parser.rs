@@ -508,7 +508,7 @@ fn parse_relational_expr(state: State) -> Answer<Expr> {
     Ok((state, lhs))
 }
 
-fn parse_assignment_expr(state: State) -> Answer<Expr> {
+fn parse_conditional_expr(state: State) -> Answer<Expr> {
     let (state, lhs) = parse_relational_expr(state)?;
     let (state, op_option) = optional_grammar(
         &[
@@ -534,8 +534,28 @@ fn parse_assignment_expr(state: State) -> Answer<Expr> {
     Ok((state, lhs))
 }
 
+fn parse_assignment_expr(state: State) -> Answer<Expr> {
+    let (state, identifier) = name(state)?;
+    let (state, _) = consume(state, "=")?;
+    let (state, expr) = parse_expr(state)?;
+    Ok((
+        state,
+        Expr::Assign {
+            name: identifier,
+            rhs: Box::new(expr),
+        },
+    ))
+}
+
 fn parse_expr(state: State) -> Answer<Expr> {
-    parse_assignment_expr(state)
+    grammar(
+        "expr",
+        &[
+            Box::new(|state| try_parser(parse_assignment_expr, state)),
+            Box::new(|state| try_parser(parse_conditional_expr, state)),
+        ],
+        state,
+    )
 }
 
 fn parse_compound_statement(state: State) -> Answer<Vec<Expr>> {
@@ -645,26 +665,11 @@ fn parse_return_statement(state: State) -> Answer<Expr> {
     Ok((state, expr))
 }
 
-fn parse_assign_statement(state: State) -> Answer<Expr> {
-    let (state, identifier) = name(state)?;
-    let (state, _) = consume(state, "=")?;
-    let (state, expr) = parse_expr(state)?;
-    let (state, _) = consume(state, ";")?;
-    Ok((
-        state,
-        Expr::Assign {
-            name: identifier,
-            rhs: Box::new(expr),
-        },
-    ))
-}
-
 fn parse_statement(state: State) -> Answer<Expr> {
     grammar(
         "type",
         &[
             Box::new(|state| try_parser(parse_return_statement, state)),
-            Box::new(|state| try_parser(parse_assign_statement, state)),
             Box::new(|state| try_parser(parse_declaration_statement, state)),
             Box::new(|state| try_parser(parse_selection_statement, state)),
         ],
