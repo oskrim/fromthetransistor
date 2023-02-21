@@ -282,7 +282,7 @@ pub fn skip(mut state: State) -> Answer<bool> {
     Ok((state, false))
 }
 
-pub fn text<'a>(pat: &str, state: State<'a>) -> Answer<'a, bool> {
+pub fn text<'a>(state: State<'a>, pat: &str) -> Answer<'a, bool> {
     let (state, _) = skip(state)?;
     if let Some(rest) = state.rest() {
         if rest.starts_with(pat) {
@@ -297,7 +297,7 @@ pub fn text<'a>(pat: &str, state: State<'a>) -> Answer<'a, bool> {
 }
 
 pub fn consume<'a>(pat: &'a str, state: State<'a>) -> Answer<'a, &'a str> {
-    let (state, matched) = text(pat, state)?;
+    let (state, matched) = text(state, pat)?;
     if matched {
         Ok((state, pat))
     } else {
@@ -332,7 +332,7 @@ pub fn grammar<'a, A: 'a>(
 }
 
 fn enum_consumer<'a, A>(pat: &'static str, val: A, state: State<'a>) -> Answer<'a, Option<A>> {
-    let (state, matched) = text(pat, state)?;
+    let (state, matched) = text(state, pat)?;
     Ok((state, if matched { Some(val) } else { None }))
 }
 
@@ -384,7 +384,7 @@ pub fn int_here(state: State) -> Answer<String> {
 }
 
 fn parse_int(state: State) -> Answer<Expr> {
-    let (state, is_hex) = text("0x", state)?;
+    let (state, is_hex) = text(state, "0x")?;
     if is_hex {
         let (state, src) = int_here(state)?;
         match u32::from_str_radix(&src, 16) {
@@ -401,7 +401,7 @@ fn parse_int(state: State) -> Answer<Expr> {
 }
 
 fn parse_factor(state: State) -> Answer<Expr> {
-    let (state, is_paren) = text("(", state)?;
+    let (state, is_paren) = text(state, "(")?;
     if is_paren {
         let (state, expr) = parse_expr(state)?;
         let (state, _) = consume(")", state)?;
@@ -516,7 +516,7 @@ fn parse_block(state: State) -> Answer<Vec<Expr>> {
     let mut exprs = Vec::new();
     let (mut state, _) = consume("{", state)?;
     loop {
-        let (new_state, got) = text("}", state)?;
+        let (new_state, got) = text(state, "}")?;
         if got {
             return Ok((new_state, exprs));
         }
@@ -527,9 +527,9 @@ fn parse_block(state: State) -> Answer<Vec<Expr>> {
 }
 
 fn parse_statement(state: State) -> Answer<Expr> {
-    let (state, ret) = text("return", state)?;
-    let (if_state, cond1) = text("if", state)?;
-    let (if_state, cond2) = text("(", if_state)?;
+    let (state, ret) = text(state, "return")?;
+    let (if_state, cond1) = text(state, "if")?;
+    let (if_state, cond2) = text(if_state, "(")?;
     if cond1 && cond2 {
         let (state, expr) = parse_expr(if_state)?;
         let (state, _) = consume(")", state)?;
@@ -589,13 +589,13 @@ fn parse_paramlist<'a, 'b>(
     pat: &str,
     state: State<'a>,
 ) -> Answer<'a, &'b Vec<Arg>> {
-    let (state, matched) = text(pat, state)?;
+    let (state, matched) = text(state, pat)?;
     if matched {
         return Ok((state, args));
     }
     let (state, ty) = parse_type(state)?;
     let (state, name) = name(state)?;
-    let (state, _) = text(",", state)?;
+    let (state, _) = text(state, ",")?;
     args.push(Arg { name, ty });
     parse_paramlist(args, pat, state)
 }
