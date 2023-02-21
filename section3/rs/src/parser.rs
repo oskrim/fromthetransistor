@@ -331,7 +331,7 @@ pub fn grammar<'a, A: 'a>(
     }
 }
 
-fn enum_consumer<'a, A>(pat: &'static str, val: A, state: State<'a>) -> Answer<'a, Option<A>> {
+fn enum_consumer<'a, A>(state: State<'a>, pat: &'static str, val: A) -> Answer<'a, Option<A>> {
     let (state, matched) = text(state, pat)?;
     Ok((state, if matched { Some(val) } else { None }))
 }
@@ -340,8 +340,8 @@ fn parse_type(state: State) -> Answer<Type> {
     grammar(
         "type",
         &[
-            Box::new(|state| enum_consumer("int", Type::Int, state)),
-            Box::new(|state| enum_consumer("void", Type::Void, state)),
+            Box::new(|state| enum_consumer(state, "int", Type::Int)),
+            Box::new(|state| enum_consumer(state, "void", Type::Void)),
         ],
         state,
     )
@@ -415,8 +415,8 @@ fn parse_term(state: State) -> Answer<Expr> {
     let (state, lhs) = parse_factor(state)?;
     let (state, op_option) = optional_grammar(
         &[
-            Box::new(|state| enum_consumer("/", Op::Div, state)),
-            Box::new(|state| enum_consumer("*", Op::Mul, state)),
+            Box::new(|state| enum_consumer(state, "/", Op::Div)),
+            Box::new(|state| enum_consumer(state, "*", Op::Mul)),
         ],
         state,
     )?;
@@ -438,8 +438,8 @@ fn parse_additive_expr(state: State) -> Answer<Expr> {
     let (state, lhs) = parse_term(state)?;
     let (state, op_option) = optional_grammar(
         &[
-            Box::new(|state| enum_consumer("-", Op::Sub, state)),
-            Box::new(|state| enum_consumer("+", Op::Add, state)),
+            Box::new(|state| enum_consumer(state, "-", Op::Sub)),
+            Box::new(|state| enum_consumer(state, "+", Op::Add)),
         ],
         state,
     )?;
@@ -461,10 +461,10 @@ fn parse_relational_expr(state: State) -> Answer<Expr> {
     let (state, lhs) = parse_additive_expr(state)?;
     let (state, op_option) = optional_grammar(
         &[
-            Box::new(|state| enum_consumer("<=", Op::Le, state)),
-            Box::new(|state| enum_consumer(">=", Op::Ge, state)),
-            Box::new(|state| enum_consumer("<", Op::Lt, state)),
-            Box::new(|state| enum_consumer(">", Op::Gt, state)),
+            Box::new(|state| enum_consumer(state, "<=", Op::Le)),
+            Box::new(|state| enum_consumer(state, ">=", Op::Ge)),
+            Box::new(|state| enum_consumer(state, "<", Op::Lt)),
+            Box::new(|state| enum_consumer(state, ">", Op::Gt)),
         ],
         state,
     )?;
@@ -486,11 +486,11 @@ fn parse_assignment_expr(state: State) -> Answer<Expr> {
     let (state, lhs) = parse_relational_expr(state)?;
     let (state, op_option) = optional_grammar(
         &[
-            Box::new(|state| enum_consumer("=", Op::Assign, state)),
-            Box::new(|state| enum_consumer("+=", Op::AddAssign, state)),
-            Box::new(|state| enum_consumer("-=", Op::SubAssign, state)),
-            Box::new(|state| enum_consumer("*=", Op::MulAssign, state)),
-            Box::new(|state| enum_consumer("/=", Op::DivAssign, state)),
+            Box::new(|state| enum_consumer(state, "=", Op::Assign)),
+            Box::new(|state| enum_consumer(state, "+=", Op::AddAssign)),
+            Box::new(|state| enum_consumer(state, "-=", Op::SubAssign)),
+            Box::new(|state| enum_consumer(state, "*=", Op::MulAssign)),
+            Box::new(|state| enum_consumer(state, "/=", Op::DivAssign)),
         ],
         state,
     )?;
