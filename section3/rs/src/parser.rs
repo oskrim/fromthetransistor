@@ -56,10 +56,18 @@ pub enum Expr {
         then: Vec<Expr>,
         otherwise: Vec<Expr>,
     },
+    Var {
+        ty: Type,
+        name: String,
+    },
     Decl {
         ty: Type,
         name: String,
         init: Option<Box<Expr>>,
+    },
+    Assign {
+        name: String,
+        rhs: Box<Expr>,
     },
 }
 
@@ -87,7 +95,7 @@ impl Deparse for Expr {
                     .collect::<Vec<_>>()
                     .join(";\n");
                 format!(
-                    "if ({}) {{\n{}\n}} else {{\n{}\n}}",
+                    "if ({}) {{\n{};\n}} else {{\n{};\n}}",
                     cond.deparse(),
                     then_str,
                     otherwise_str,
@@ -103,6 +111,10 @@ impl Deparse for Expr {
                 name,
                 init: None,
             } => format!("{} {}", ty.deparse(), name),
+            Expr::Assign { name, rhs } => {
+                format!("{} = {}", name, rhs.deparse())
+            }
+            Expr::Var { ty: _, name } => format!("{}", name),
         }
     }
 }
@@ -633,13 +645,28 @@ fn parse_return_statement(state: State) -> Answer<Expr> {
     Ok((state, expr))
 }
 
+fn parse_assign_statement(state: State) -> Answer<Expr> {
+    let (state, identifier) = name(state)?;
+    let (state, _) = consume(state, "=")?;
+    let (state, expr) = parse_expr(state)?;
+    let (state, _) = consume(state, ";")?;
+    Ok((
+        state,
+        Expr::Assign {
+            name: identifier,
+            rhs: Box::new(expr),
+        },
+    ))
+}
+
 fn parse_statement(state: State) -> Answer<Expr> {
     grammar(
         "type",
         &[
+            Box::new(|state| try_parser(parse_return_statement, state)),
+            Box::new(|state| try_parser(parse_assign_statement, state)),
             Box::new(|state| try_parser(parse_declaration_statement, state)),
             Box::new(|state| try_parser(parse_selection_statement, state)),
-            Box::new(|state| try_parser(parse_return_statement, state)),
         ],
         state,
     )
@@ -862,6 +889,44 @@ mod tests {
                 rhs: Box::new(Expr::Int { value: 3738978009 }),
             },
             Expr::Int { value: 2714820978 },
+        ];
+        test_main1(code, ret_type, exprs);
+    }
+
+    #[test]
+    fn test_assign1() {
+        let code = "int main() { int a; int b; a = 2; b = 3 + 2; return 1 + 2; }";
+        let ret_type = Type::Int;
+        let exprs = vec![
+            Expr::Decl {
+                ty: Type::Int,
+                name: "a".to_string(),
+                init: None,
+            },
+            Expr::Decl {
+                ty: Type::Int,
+                name: "b".to_string(),
+                init: None,
+            },
+            Expr::Assign {
+                name: "a".to_string(),
+                rhs: Box::new(Expr::Int { value: 2 }),
+            },
+            Expr::Assign {
+                name: "b".to_string(),
+                rhs: Box::new(Expr::BinOp {
+                    op: Op::Add,
+                    lhs: Box::new(Expr::Int { value: 3 }),
+                    rhs: Box::new(Expr::Int { value: 2 }),
+                }),
+            },
+            Expr::Return {
+                expr: Box::new(Expr::BinOp {
+                    op: Op::Add,
+                    lhs: Box::new(Expr::Int { value: 1 }),
+                    rhs: Box::new(Expr::Int { value: 2 }),
+                }),
+            },
         ];
         test_main1(code, ret_type, exprs);
     }

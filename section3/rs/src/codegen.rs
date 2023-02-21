@@ -26,6 +26,11 @@ struct LLVM {
     named_values: HashMap<String, LLVMValueRef>,
 }
 
+struct Scope {
+    locals: HashMap<String, LLVMValueRef>,
+    func: LLVMValueRef,
+}
+
 impl LLVM {
     fn new() -> LLVM {
         let name = cstr("my cool jit");
@@ -44,7 +49,7 @@ impl LLVM {
 }
 
 impl Expr {
-    fn codegen(&self, llvm: &mut LLVM, func: LLVMValueRef) -> Result<LLVMValueRef, String> {
+    fn codegen(&self, llvm: &mut LLVM, scope: &Scope) -> Result<LLVMValueRef, String> {
         match self {
             Expr::Int { value } => {
                 let ty = unsafe { LLVMInt32TypeInContext(llvm.ctx) };
@@ -52,8 +57,8 @@ impl Expr {
                 Ok(val)
             }
             Expr::BinOp { lhs, rhs, op } => {
-                let lhsval = lhs.codegen(llvm, func)?;
-                let rhsval = rhs.codegen(llvm, func)?;
+                let lhsval = lhs.codegen(llvm, scope)?;
+                let rhsval = rhs.codegen(llvm, scope)?;
                 match op {
                     Op::Add => {
                         let val = unsafe {
@@ -147,7 +152,7 @@ impl Expr {
                 }
             }
             Expr::Return { expr } => {
-                let val = expr.codegen(llvm, func)?;
+                let val = expr.codegen(llvm, scope)?;
                 unsafe { LLVMBuildRet(llvm.builder, val) };
                 Ok(val)
             }
@@ -156,31 +161,33 @@ impl Expr {
                 then,
                 otherwise,
             } => {
-                let cond_val = cond.codegen(llvm, func)?;
-                let then_bb =
-                    unsafe { LLVMAppendBasicBlockInContext(llvm.ctx, func, cstr("then").as_ptr()) };
-                let else_bb =
-                    unsafe { LLVMAppendBasicBlockInContext(llvm.ctx, func, cstr("else").as_ptr()) };
+                let cond_val = cond.codegen(llvm, scope)?;
+                let then_bb = unsafe {
+                    LLVMAppendBasicBlockInContext(llvm.ctx, scope.func, cstr("then").as_ptr())
+                };
+                let else_bb = unsafe {
+                    LLVMAppendBasicBlockInContext(llvm.ctx, scope.func, cstr("else").as_ptr())
+                };
                 let merge_bb = unsafe {
-                    LLVMAppendBasicBlockInContext(llvm.ctx, func, cstr("merge").as_ptr())
+                    LLVMAppendBasicBlockInContext(llvm.ctx, scope.func, cstr("merge").as_ptr())
                 };
 
                 unsafe {
                     LLVMBuildCondBr(llvm.builder, cond_val, then_bb, else_bb);
                     LLVMPositionBuilderAtEnd(llvm.builder, then_bb);
                 }
-                let mut then_val = Expr::Int { value: 0 }.codegen(llvm, func)?;
+                let mut then_val = Expr::Int { value: 0 }.codegen(llvm, scope)?;
                 for expr in then {
-                    then_val = expr.codegen(llvm, func)?;
+                    then_val = expr.codegen(llvm, scope)?;
                 }
 
                 unsafe {
                     LLVMBuildBr(llvm.builder, merge_bb);
                     LLVMPositionBuilderAtEnd(llvm.builder, else_bb);
                 }
-                let mut else_val = Expr::Int { value: 0 }.codegen(llvm, func)?;
+                let mut else_val = Expr::Int { value: 0 }.codegen(llvm, scope)?;
                 for expr in otherwise {
-                    else_val = expr.codegen(llvm, func)?;
+                    else_val = expr.codegen(llvm, scope)?;
                 }
 
                 unsafe {
@@ -212,6 +219,16 @@ impl Expr {
                 // unsafe { LLVMBuildStore(llvm.builder, init_val, val) };
                 Ok(val)
             }
+            Expr::Var { ty: _, name } => {
+                let val =
+                    unsafe { LLVMBuildLoad(llvm.builder, scope.locals[name], cstr(name).as_ptr()) };
+                Ok(val)
+            }
+            Expr::Assign { name, rhs } => {
+                let val = rhs.codegen(llvm, scope)?;
+                // unsafe { LLVMBuildStore(llvm.builder, val, scope.locals[name]) };
+                Ok(val)
+            }
         }
     }
 }
@@ -241,6 +258,11 @@ impl Function {
             unsafe { LLVMAppendBasicBlockInContext(llvm.ctx, fn_value, cstr("entry").as_ptr()) };
         unsafe { LLVMPositionBuilderAtEnd(llvm.builder, bb) };
 
+        let scope = Scope {
+            func: fn_value,
+            locals: HashMap::new(), // TODO: Consider global scope
+        };
+
         for (i, arg) in self.args.iter().enumerate() {
             let name = cstr(&arg.name);
             let val = unsafe { LLVMGetParam(fn_value, i as u32) };
@@ -249,7 +271,7 @@ impl Function {
         }
 
         for expr in &self.exprs {
-            let ir = expr.codegen(llvm, fn_value);
+            let ir = expr.codegen(llvm, &scope);
             match expr {
                 Expr::Return { .. } => return ir,
                 _ => {}
@@ -258,7 +280,7 @@ impl Function {
         let void_ret = Expr::Return {
             expr: Box::new(Expr::Int { value: 0 }),
         };
-        void_ret.codegen(llvm, fn_value)
+        void_ret.codegen(llvm, &scope)
     }
 }
 
