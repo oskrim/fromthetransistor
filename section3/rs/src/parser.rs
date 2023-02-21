@@ -296,7 +296,7 @@ pub fn text<'a>(state: State<'a>, pat: &str) -> Answer<'a, bool> {
     Ok((state, false))
 }
 
-pub fn consume<'a>(pat: &'a str, state: State<'a>) -> Answer<'a, &'a str> {
+pub fn consume<'a>(state: State<'a>, pat: &'a str) -> Answer<'a, &'a str> {
     let (state, matched) = text(state, pat)?;
     if matched {
         Ok((state, pat))
@@ -404,7 +404,7 @@ fn parse_factor(state: State) -> Answer<Expr> {
     let (state, is_paren) = text(state, "(")?;
     if is_paren {
         let (state, expr) = parse_expr(state)?;
-        let (state, _) = consume(")", state)?;
+        let (state, _) = consume(state, ")")?;
         Ok((state, expr))
     } else {
         parse_int(state)
@@ -514,7 +514,7 @@ fn parse_expr(state: State) -> Answer<Expr> {
 
 fn parse_block(state: State) -> Answer<Vec<Expr>> {
     let mut exprs = Vec::new();
-    let (mut state, _) = consume("{", state)?;
+    let (mut state, _) = consume(state, "{")?;
     loop {
         let (new_state, got) = text(state, "}")?;
         if got {
@@ -532,7 +532,7 @@ fn parse_statement(state: State) -> Answer<Expr> {
     let (if_state, cond2) = text(if_state, "(")?;
     if cond1 && cond2 {
         let (state, expr) = parse_expr(if_state)?;
-        let (state, _) = consume(")", state)?;
+        let (state, _) = consume(state, ")")?;
         let (state, then) = grammar(
             "body of if",
             &[
@@ -550,12 +550,12 @@ fn parse_statement(state: State) -> Answer<Expr> {
         let (state, else_option) = optional_grammar(
             &[
                 Box::new(|state| {
-                    let (state, _) = consume("else", state)?;
+                    let (state, _) = consume(state, "else")?;
                     let (state, body) = parse_block(state)?;
                     Ok((state, Some(body)))
                 }),
                 Box::new(|state| {
-                    let (state, _) = consume("else", state)?;
+                    let (state, _) = consume(state, "else")?;
                     let (state, expr) = parse_statement(state)?;
                     Ok((state, Some(vec![expr])))
                 }),
@@ -572,7 +572,7 @@ fn parse_statement(state: State) -> Answer<Expr> {
         ));
     }
     let (state, expr) = parse_expr(state)?;
-    let (state, _) = consume(";", state)?;
+    let (state, _) = consume(state, ";")?;
     if ret {
         return Ok((
             state,
@@ -603,7 +603,7 @@ fn parse_paramlist<'a, 'b>(
 fn parse_function(state: State) -> Answer<Function> {
     let (state, ret_type) = parse_type(state)?;
     let (state, name) = name(state)?;
-    let (state, _) = consume("(", state)?;
+    let (state, _) = consume(state, "(")?;
     let mut args = Vec::new();
     let (state, _) = parse_paramlist(&mut args, ")", state)?;
     let (state, exprs) = parse_block(state)?;
