@@ -512,7 +512,7 @@ fn parse_expr(state: State) -> Answer<Expr> {
     parse_assignment_expr(state)
 }
 
-fn parse_block(state: State) -> Answer<Vec<Expr>> {
+fn parse_compound_statement(state: State) -> Answer<Vec<Expr>> {
     let mut exprs = Vec::new();
     let (mut state, _) = consume(state, "{")?;
     loop {
@@ -537,7 +537,7 @@ fn parse_statement(state: State) -> Answer<Expr> {
             "body of if",
             &[
                 Box::new(|state| {
-                    let (state, body) = parse_block(state)?;
+                    let (state, body) = parse_compound_statement(state)?;
                     Ok((state, Some(body)))
                 }),
                 Box::new(|state| {
@@ -551,7 +551,7 @@ fn parse_statement(state: State) -> Answer<Expr> {
             &[
                 Box::new(|state| {
                     let (state, _) = consume(state, "else")?;
-                    let (state, body) = parse_block(state)?;
+                    let (state, body) = parse_compound_statement(state)?;
                     Ok((state, Some(body)))
                 }),
                 Box::new(|state| {
@@ -606,7 +606,7 @@ fn parse_function(state: State) -> Answer<Function> {
     let (state, _) = consume(state, "(")?;
     let mut args = Vec::new();
     let (state, _) = parse_paramlist(&mut args, ")", state)?;
-    let (state, exprs) = parse_block(state)?;
+    let (state, exprs) = parse_compound_statement(state)?;
     let function = Function {
         ret_type,
         exprs,
