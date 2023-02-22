@@ -1003,6 +1003,51 @@ mod tests {
     }
 
     #[test]
+    fn test_conditional5() {
+        let code = "int main() { int a = *0x400; if (a > 123) { return 42; } else { if (a < 100) { a = 10; } else { a = 20; } } }";
+        let ret_type = Type::Int;
+        let exprs = vec![
+            Expr::Decl {
+                ty: Type::Int,
+                name: "a".to_string(),
+                init: Some(Box::new(Expr::Deref {
+                    addr: Box::new(Expr::Int { value: 0x400 }),
+                })),
+            },
+            Expr::If {
+                cond: Box::new(Expr::BinOp {
+                    op: Op::Gt,
+                    lhs: Box::new(Expr::Var {
+                        name: "a".to_string(),
+                    }),
+                    rhs: Box::new(Expr::Int { value: 123 }),
+                }),
+                then: vec![Expr::Return {
+                    expr: Box::new(Expr::Int { value: 42 }),
+                }],
+                otherwise: vec![Expr::If {
+                    cond: Box::new(Expr::BinOp {
+                        op: Op::Lt,
+                        lhs: Box::new(Expr::Var {
+                            name: "a".to_string(),
+                        }),
+                        rhs: Box::new(Expr::Int { value: 100 }),
+                    }),
+                    then: vec![Expr::Assign {
+                        name: "a".to_string(),
+                        rhs: Box::new(Expr::Int { value: 10 }),
+                    }],
+                    otherwise: vec![Expr::Assign {
+                        name: "a".to_string(),
+                        rhs: Box::new(Expr::Int { value: 20 }),
+                    }],
+                }],
+            },
+        ];
+        test_main1(code, ret_type, exprs);
+    }
+
+    #[test]
     fn test_parse2() {
         let code = "int main() { return 3 + 2; }";
         let ret_type = Type::Int;
