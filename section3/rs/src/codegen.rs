@@ -195,33 +195,48 @@ impl Expr {
                 let else_bb = unsafe {
                     LLVMAppendBasicBlockInContext(llvm.ctx, llvm.func, cstr("else").as_ptr())
                 };
+                let merge_bb = unsafe {
+                    LLVMAppendBasicBlockInContext(llvm.ctx, llvm.func, cstr("merge").as_ptr())
+                };
 
                 let cond_val = cond.codegen(llvm)?;
                 unsafe {
                     LLVMBuildCondBr(llvm.builder, cond_val, then_bb, else_bb);
                     LLVMPositionBuilderAtEnd(llvm.builder, then_bb);
                 }
+
+                let mut is_ret = false;
                 for expr in then {
                     expr.codegen(llvm)?;
                     match expr {
-                        Expr::Return { .. } => break,
+                        Expr::Return { .. } => {
+                            is_ret = true;
+                            break;
+                        }
                         _ => (),
                     }
                 }
+                let br_block = if is_ret { llvm.ret_block } else { merge_bb };
                 unsafe {
-                    LLVMBuildBr(llvm.builder, llvm.ret_block);
+                    LLVMBuildBr(llvm.builder, br_block);
                     LLVMPositionBuilderAtEnd(llvm.builder, else_bb);
                 }
+
+                let mut is_ret = false;
                 for expr in otherwise {
                     expr.codegen(llvm)?;
                     match expr {
-                        Expr::Return { .. } => break,
+                        Expr::Return { .. } => {
+                            is_ret = true;
+                            break;
+                        }
                         _ => (),
                     }
                 }
+                let br_block = if is_ret { llvm.ret_block } else { merge_bb };
                 unsafe {
-                    LLVMBuildBr(llvm.builder, llvm.ret_block);
-                    LLVMPositionBuilderAtEnd(llvm.builder, llvm.ret_block);
+                    LLVMBuildBr(llvm.builder, br_block);
+                    LLVMPositionBuilderAtEnd(llvm.builder, merge_bb);
                 }
 
                 Ok(std::ptr::null_mut())
@@ -309,8 +324,6 @@ impl Function {
 
         llvm.ret_block =
             unsafe { LLVMAppendBasicBlockInContext(llvm.ctx, fn_value, cstr("retblock").as_ptr()) };
-        unsafe { LLVMPositionBuilderAtEnd(llvm.builder, llvm.ret_block) };
-        unsafe { LLVMBuildRet(llvm.builder, llvm.ret_val) };
         unsafe { LLVMPositionBuilderAtEnd(llvm.builder, bb) };
 
         for (i, arg) in self.args.iter().enumerate() {
@@ -326,11 +339,12 @@ impl Function {
             );
         }
 
-        let mut ir = Err("No expressions in function".to_string());
         for expr in &self.exprs {
-            ir = expr.codegen(llvm);
+            expr.codegen(llvm)?;
         }
-        ir
+        unsafe { LLVMBuildBr(llvm.builder, llvm.ret_block) };
+        unsafe { LLVMPositionBuilderAtEnd(llvm.builder, llvm.ret_block) };
+        Ok(unsafe { LLVMBuildRet(llvm.builder, llvm.ret_val) })
     }
 }
 
