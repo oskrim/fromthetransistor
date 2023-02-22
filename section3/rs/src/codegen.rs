@@ -19,16 +19,19 @@ fn cstr(s: &str) -> Cow<CStr> {
     Cow::from(CString::new(s).expect("works"))
 }
 
+struct Scoped {
+    ty: LLVMTypeRef,
+    val: LLVMValueRef,
+}
+
 struct LLVM {
     ctx: LLVMContextRef,
     builder: LLVMBuilderRef,
     module: LLVMModuleRef,
-    named_values: HashMap<String, LLVMValueRef>,
-}
-
-struct Scope {
-    locals: HashMap<String, LLVMValueRef>,
+    locals: HashMap<String, Scoped>,
     func: LLVMValueRef,
+    ret_block: LLVMBasicBlockRef,
+    ret_val: LLVMValueRef,
 }
 
 impl LLVM {
@@ -42,14 +45,17 @@ impl LLVM {
                 ctx,
                 builder,
                 module,
-                named_values: HashMap::new(),
+                locals: HashMap::new(),
+                func: std::ptr::null_mut(),
+                ret_block: std::ptr::null_mut(),
+                ret_val: std::ptr::null_mut(),
             }
         }
     }
 }
 
 impl Expr {
-    fn codegen(&self, llvm: &mut LLVM, scope: &Scope) -> Result<LLVMValueRef, String> {
+    fn codegen(&self, llvm: &mut LLVM) -> Result<LLVMValueRef, String> {
         match self {
             Expr::Int { value } => {
                 let ty = unsafe { LLVMInt32TypeInContext(llvm.ctx) };
@@ -57,8 +63,8 @@ impl Expr {
                 Ok(val)
             }
             Expr::BinOp { lhs, rhs, op } => {
-                let lhsval = lhs.codegen(llvm, scope)?;
-                let rhsval = rhs.codegen(llvm, scope)?;
+                let lhsval = lhs.codegen(llvm)?;
+                let rhsval = rhs.codegen(llvm)?;
                 match op {
                     Op::Add => {
                         let val = unsafe {
@@ -144,70 +150,81 @@ impl Expr {
                         };
                         Ok(val)
                     }
+                    Op::Ne => {
+                        let val = unsafe {
+                            LLVMBuildICmp(
+                                llvm.builder,
+                                LLVMIntNE,
+                                lhsval,
+                                rhsval,
+                                cstr("cmptmp").as_ptr(),
+                            )
+                        };
+                        Ok(val)
+                    }
                     Op::Assign => {
                         let val = unsafe { LLVMBuildStore(llvm.builder, lhsval, rhsval) };
                         Ok(val)
                     }
-                    _ => Err(format!("unimplemented op: {:?}", op)),
+                    Op::And => {
+                        let val = unsafe {
+                            LLVMBuildAnd(llvm.builder, lhsval, rhsval, cstr("andtmp").as_ptr())
+                        };
+                        Ok(val)
+                    }
+                    Op::Or => {
+                        let val = unsafe {
+                            LLVMBuildOr(llvm.builder, lhsval, rhsval, cstr("ortmp").as_ptr())
+                        };
+                        Ok(val)
+                    }
                 }
             }
             Expr::Return { expr } => {
-                let val = expr.codegen(llvm, scope)?;
-                unsafe { LLVMBuildRet(llvm.builder, val) };
-                Ok(val)
+                unsafe { LLVMBuildStore(llvm.builder, expr.codegen(llvm)?, llvm.ret_val) };
+                Ok(std::ptr::null_mut())
             }
             Expr::If {
                 cond,
                 then,
                 otherwise,
             } => {
-                let cond_val = cond.codegen(llvm, scope)?;
                 let then_bb = unsafe {
-                    LLVMAppendBasicBlockInContext(llvm.ctx, scope.func, cstr("then").as_ptr())
+                    LLVMAppendBasicBlockInContext(llvm.ctx, llvm.func, cstr("then").as_ptr())
                 };
                 let else_bb = unsafe {
-                    LLVMAppendBasicBlockInContext(llvm.ctx, scope.func, cstr("else").as_ptr())
-                };
-                let merge_bb = unsafe {
-                    LLVMAppendBasicBlockInContext(llvm.ctx, scope.func, cstr("merge").as_ptr())
+                    LLVMAppendBasicBlockInContext(llvm.ctx, llvm.func, cstr("else").as_ptr())
                 };
 
+                let cond_val = cond.codegen(llvm)?;
                 unsafe {
                     LLVMBuildCondBr(llvm.builder, cond_val, then_bb, else_bb);
                     LLVMPositionBuilderAtEnd(llvm.builder, then_bb);
                 }
-                let mut then_val = Expr::Int { value: 0 }.codegen(llvm, scope)?;
                 for expr in then {
-                    then_val = expr.codegen(llvm, scope)?;
+                    expr.codegen(llvm)?;
+                    match expr {
+                        Expr::Return { .. } => break,
+                        _ => (),
+                    }
                 }
-
                 unsafe {
-                    LLVMBuildBr(llvm.builder, merge_bb);
+                    LLVMBuildBr(llvm.builder, llvm.ret_block);
                     LLVMPositionBuilderAtEnd(llvm.builder, else_bb);
                 }
-                let mut else_val = Expr::Int { value: 0 }.codegen(llvm, scope)?;
                 for expr in otherwise {
-                    else_val = expr.codegen(llvm, scope)?;
+                    expr.codegen(llvm)?;
+                    match expr {
+                        Expr::Return { .. } => break,
+                        _ => (),
+                    }
+                }
+                unsafe {
+                    LLVMBuildBr(llvm.builder, llvm.ret_block);
+                    LLVMPositionBuilderAtEnd(llvm.builder, llvm.ret_block);
                 }
 
-                unsafe {
-                    LLVMBuildBr(llvm.builder, merge_bb);
-                    LLVMPositionBuilderAtEnd(llvm.builder, merge_bb);
-                }
-                let phi = unsafe {
-                    LLVMBuildPhi(
-                        llvm.builder,
-                        LLVMInt32TypeInContext(llvm.ctx),
-                        cstr("iftmp").as_ptr(),
-                    )
-                };
-
-                let mut vals = [then_val, else_val];
-                let mut bbs = [then_bb, else_bb];
-                unsafe {
-                    LLVMAddIncoming(phi, vals.as_mut_ptr(), bbs.as_mut_ptr(), vals.len() as u32)
-                };
-                Ok(phi)
+                Ok(std::ptr::null_mut())
             }
             Expr::Decl { ty, name, init } => {
                 let ty = match ty {
@@ -215,18 +232,46 @@ impl Expr {
                     Type::Void => unsafe { LLVMVoidTypeInContext(llvm.ctx) },
                 };
                 let val = unsafe { LLVMBuildAlloca(llvm.builder, ty, cstr(name).as_ptr()) };
-                // let init_val = init.codegen(llvm, func)?;
-                // unsafe { LLVMBuildStore(llvm.builder, init_val, val) };
+                llvm.locals.insert(name.clone(), Scoped { val, ty });
+                match init {
+                    Some(init) => {
+                        let init_val = init.codegen(llvm)?;
+                        unsafe { LLVMBuildStore(llvm.builder, init_val, val) };
+                    }
+                    None => {}
+                }
                 Ok(val)
             }
             Expr::Var { name } => {
-                let val =
-                    unsafe { LLVMBuildLoad(llvm.builder, scope.locals[name], cstr(name).as_ptr()) };
+                let scoped = llvm.locals.get(name).unwrap();
+                let val = unsafe {
+                    LLVMBuildLoad2(llvm.builder, scoped.ty, scoped.val, cstr(name).as_ptr())
+                };
                 Ok(val)
             }
             Expr::Assign { name, rhs } => {
-                let val = rhs.codegen(llvm, scope)?;
-                // unsafe { LLVMBuildStore(llvm.builder, val, scope.locals[name]) };
+                let val = rhs.codegen(llvm)?;
+                unsafe { LLVMBuildStore(llvm.builder, val, llvm.locals[name].val) };
+                Ok(val)
+            }
+            Expr::Deref { addr } => {
+                let addr_val = addr.codegen(llvm)?;
+                let ptr_val = unsafe {
+                    LLVMBuildIntToPtr(
+                        llvm.builder,
+                        addr_val,
+                        LLVMPointerType(LLVMInt32TypeInContext(llvm.ctx), 0),
+                        cstr("deref").as_ptr(),
+                    )
+                };
+                let val = unsafe {
+                    LLVMBuildLoad2(
+                        llvm.builder,
+                        LLVMInt32TypeInContext(llvm.ctx),
+                        ptr_val,
+                        cstr("deref").as_ptr(),
+                    )
+                };
                 Ok(val)
             }
         }
@@ -254,33 +299,38 @@ impl Function {
         };
         let name = cstr(&self.name);
         let fn_value = unsafe { LLVMAddFunction(llvm.module, name.as_ptr(), fn_type) };
+        llvm.func = fn_value;
+
         let bb =
             unsafe { LLVMAppendBasicBlockInContext(llvm.ctx, fn_value, cstr("entry").as_ptr()) };
         unsafe { LLVMPositionBuilderAtEnd(llvm.builder, bb) };
+        llvm.ret_val = unsafe { LLVMBuildAlloca(llvm.builder, ret_type, cstr("ret").as_ptr()) };
+        unsafe { LLVMBuildStore(llvm.builder, LLVMConstInt(ret_type, 0, 0), llvm.ret_val) };
 
-        let scope = Scope {
-            func: fn_value,
-            locals: HashMap::new(), // TODO: Consider global scope
-        };
+        llvm.ret_block =
+            unsafe { LLVMAppendBasicBlockInContext(llvm.ctx, fn_value, cstr("retblock").as_ptr()) };
+        unsafe { LLVMPositionBuilderAtEnd(llvm.builder, llvm.ret_block) };
+        unsafe { LLVMBuildRet(llvm.builder, llvm.ret_val) };
+        unsafe { LLVMPositionBuilderAtEnd(llvm.builder, bb) };
 
         for (i, arg) in self.args.iter().enumerate() {
             let name = cstr(&arg.name);
             let val = unsafe { LLVMGetParam(fn_value, i as u32) };
             unsafe { LLVMSetValueName2(val, name.as_ptr(), arg.name.len()) };
-            llvm.named_values.insert(arg.name.clone(), val);
+            llvm.locals.insert(
+                arg.name.clone(),
+                Scoped {
+                    val,
+                    ty: arg_types[i],
+                },
+            );
         }
 
+        let mut ir = Err("No expressions in function".to_string());
         for expr in &self.exprs {
-            let ir = expr.codegen(llvm, &scope);
-            match expr {
-                Expr::Return { .. } => return ir,
-                _ => {}
-            }
+            ir = expr.codegen(llvm);
         }
-        let void_ret = Expr::Return {
-            expr: Box::new(Expr::Int { value: 0 }),
-        };
-        void_ret.codegen(llvm, &scope)
+        ir
     }
 }
 
@@ -298,16 +348,14 @@ impl Program {
 pub fn codegen(program: &Program, path: &str) {
     let mut llvm = LLVM::new();
     unsafe {
-        let ir = program.codegen(&mut llvm).unwrap();
-        LLVMDumpValue(ir);
-
         LLVM_InitializeAllTargetInfos();
         LLVM_InitializeAllTargets();
         LLVM_InitializeAllTargetMCs();
         LLVM_InitializeAllAsmParsers();
         LLVM_InitializeAllAsmPrinters();
 
-        let target_triple = LLVMCreateMessage(cstr("armv7-unknown-linux-gnueabi").as_ptr());
+        program.codegen(&mut llvm).unwrap();
+        let target_triple = LLVMCreateMessage(cstr("armv7s-apple-ios").as_ptr());
         let mut err_string = std::mem::MaybeUninit::uninit();
         let mut target = std::ptr::null_mut();
         let ok = llvm_sys::target_machine::LLVMGetTargetFromTriple(
@@ -319,9 +367,8 @@ pub fn codegen(program: &Program, path: &str) {
             println!("Error: {:?}", CStr::from_ptr(err_string.assume_init()));
             return;
         }
-        println!("Target: {:?}", target);
 
-        let cpu = LLVMCreateMessage(cstr("generic").as_ptr());
+        let cpu = LLVMCreateMessage(cstr("").as_ptr());
         let features = LLVMCreateMessage(cstr("").as_ptr());
         let target_machine = LLVMCreateTargetMachine(
             target,
@@ -332,10 +379,10 @@ pub fn codegen(program: &Program, path: &str) {
             LLVMRelocMode::LLVMRelocDefault,
             LLVMCodeModel::LLVMCodeModelDefault,
         );
-        println!("Target machine: {:?}", target_machine);
 
         let filename = LLVMCreateMessage(cstr(path).as_ptr());
         err_string = std::mem::MaybeUninit::uninit();
+        LLVMDumpModule(llvm.module);
         let ok = LLVMTargetMachineEmitToFile(
             target_machine,
             llvm.module,

@@ -68,6 +68,9 @@ pub enum Expr {
         name: String,
         rhs: Box<Expr>,
     },
+    Deref {
+        addr: Box<Expr>,
+    },
 }
 
 impl Deparse for Expr {
@@ -114,6 +117,7 @@ impl Deparse for Expr {
                 format!("{} = {}", name, rhs.deparse())
             }
             Expr::Var { name } => format!("{}", name),
+            Expr::Deref { addr } => format!("*{}", addr.deparse()),
         }
     }
 }
@@ -430,10 +434,22 @@ fn parse_var(state: State) -> Answer<Expr> {
     Ok((state, Expr::Var { name }))
 }
 
+fn parse_deref(state: State) -> Answer<Expr> {
+    let (state, _) = consume(state, "*")?;
+    let (state, expr) = parse_factor(state)?;
+    Ok((
+        state,
+        Expr::Deref {
+            addr: Box::new(expr),
+        },
+    ))
+}
+
 fn parse_primary_expr(state: State) -> Answer<Expr> {
     grammar(
         "primary",
         &[
+            Box::new(|state| try_parser(parse_deref, state)),
             Box::new(|state| try_parser(parse_int, state)),
             Box::new(|state| try_parser(parse_var, state)),
         ],
@@ -826,6 +842,12 @@ mod tests {
         let file_path = format!("out/{}.out", hash.to_string());
         println!("writing to {}", file_path);
         codegen(program, &file_path);
+        // print the file to stdout
+        let output = std::process::Command::new("cat")
+            .arg(&file_path)
+            .output()
+            .expect("failed to execute process");
+        println!("{}", String::from_utf8(output.stdout).unwrap());
     }
 
     fn test_main1(code: &str, ret_type: Type, exprs: Vec<Expr>) {
@@ -911,6 +933,72 @@ mod tests {
                 expr: Box::new(Expr::Int { value: 1 }),
             }],
         }];
+        test_main1(code, ret_type, exprs);
+    }
+
+    #[test]
+    fn test_conditional3() {
+        let code = "int main() { int a = *0x400; if (a > 123) { return 42; } else { return 24; } }";
+        let ret_type = Type::Int;
+        let exprs = vec![
+            Expr::Decl {
+                ty: Type::Int,
+                name: "a".to_string(),
+                init: Some(Box::new(Expr::Deref {
+                    addr: Box::new(Expr::Int { value: 0x400 }),
+                })),
+            },
+            Expr::If {
+                cond: Box::new(Expr::BinOp {
+                    op: Op::Gt,
+                    lhs: Box::new(Expr::Var {
+                        name: "a".to_string(),
+                    }),
+                    rhs: Box::new(Expr::Int { value: 123 }),
+                }),
+                then: vec![Expr::Return {
+                    expr: Box::new(Expr::Int { value: 42 }),
+                }],
+                otherwise: vec![Expr::Return {
+                    expr: Box::new(Expr::Int { value: 24 }),
+                }],
+            },
+        ];
+        test_main1(code, ret_type, exprs);
+    }
+
+    #[test]
+    fn test_conditional4() {
+        let code = "int main(int x) { int a; a = x; if (a > 0) { return 0; } else { return 1; } }";
+        let ret_type = Type::Int;
+        let exprs = vec![
+            Expr::Decl {
+                ty: Type::Int,
+                name: "a".to_string(),
+                init: None,
+            },
+            Expr::Assign {
+                name: "a".to_string(),
+                rhs: Box::new(Expr::Var {
+                    name: "x".to_string(),
+                }),
+            },
+            Expr::If {
+                cond: Box::new(Expr::BinOp {
+                    op: Op::Gt,
+                    lhs: Box::new(Expr::Var {
+                        name: "a".to_string(),
+                    }),
+                    rhs: Box::new(Expr::Int { value: 0 }),
+                }),
+                then: vec![Expr::Return {
+                    expr: Box::new(Expr::Int { value: 0 }),
+                }],
+                otherwise: vec![Expr::Return {
+                    expr: Box::new(Expr::Int { value: 1 }),
+                }],
+            },
+        ];
         test_main1(code, ret_type, exprs);
     }
 
