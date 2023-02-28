@@ -264,9 +264,27 @@ impl Expr {
                 };
                 Ok(val)
             }
-            Expr::Assign { name, rhs } => {
-                let val = rhs.codegen(llvm)?;
-                unsafe { LLVMBuildStore(llvm.builder, val, llvm.locals[name].val) };
+            Expr::Assign { lhs, rhs } => {
+                let ptr = match &**lhs {
+                    Expr::Var { name } => {
+                        let scoped = llvm.locals.get(name).unwrap();
+                        scoped.val
+                    }
+                    Expr::Deref { addr } => {
+                        let addr_val = addr.codegen(llvm)?;
+                        unsafe {
+                            LLVMBuildIntToPtr(
+                                llvm.builder,
+                                addr_val,
+                                LLVMPointerType(LLVMInt32TypeInContext(llvm.ctx), 0),
+                                cstr("deref").as_ptr(),
+                            )
+                        }
+                    }
+                    _ => panic!("invalid lhs"),
+                };
+                let val= rhs.codegen(llvm)?;
+                unsafe { LLVMBuildStore(llvm.builder, val, ptr) };
                 Ok(val)
             }
             Expr::Deref { addr } => {
@@ -288,6 +306,47 @@ impl Expr {
                     )
                 };
                 Ok(val)
+            }
+            Expr::While { cond, body } => {
+                let cond_bb = unsafe {
+                    LLVMAppendBasicBlockInContext(llvm.ctx, llvm.func, cstr("cond").as_ptr())
+                };
+                let body_bb = unsafe {
+                    LLVMAppendBasicBlockInContext(llvm.ctx, llvm.func, cstr("body").as_ptr())
+                };
+                let merge_bb = unsafe {
+                    LLVMAppendBasicBlockInContext(llvm.ctx, llvm.func, cstr("merge").as_ptr())
+                };
+
+                unsafe {
+                    LLVMBuildBr(llvm.builder, cond_bb);
+                    LLVMPositionBuilderAtEnd(llvm.builder, cond_bb);
+                }
+
+                let cond_val = cond.codegen(llvm)?;
+                unsafe {
+                    LLVMBuildCondBr(llvm.builder, cond_val, body_bb, merge_bb);
+                    LLVMPositionBuilderAtEnd(llvm.builder, body_bb);
+                }
+
+                let mut is_ret = false;
+                for expr in body {
+                    expr.codegen(llvm)?;
+                    match expr {
+                        Expr::Return { .. } => {
+                            is_ret = true;
+                            break;
+                        }
+                        _ => (),
+                    }
+                }
+                let br_block = if is_ret { llvm.ret_block } else { cond_bb };
+                unsafe {
+                    LLVMBuildBr(llvm.builder, br_block);
+                    LLVMPositionBuilderAtEnd(llvm.builder, merge_bb);
+                }
+
+                Ok(std::ptr::null_mut())
             }
         }
     }

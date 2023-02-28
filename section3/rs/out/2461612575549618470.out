@@ -1,32 +1,14 @@
-	.text
+	.section	__TEXT,__text,regular,pure_instructions
 	.syntax unified
-	.eabi_attribute	67, "2.09"
-	.eabi_attribute	6, 10
-	.eabi_attribute	7, 65
-	.eabi_attribute	8, 1
-	.eabi_attribute	9, 2
-	.fpu	neon
-	.eabi_attribute	34, 1
-	.eabi_attribute	17, 1
-	.eabi_attribute	20, 1
-	.eabi_attribute	21, 0
-	.eabi_attribute	23, 3
-	.eabi_attribute	24, 1
-	.eabi_attribute	25, 1
-	.eabi_attribute	38, 1
-	.eabi_attribute	14, 0
-	.file	"my cool jit"
-	.globl	main
+	.globl	_main
 	.p2align	2
-	.type	main,%function
 	.code	32
-main:
-	.fnstart
+_main:
+	sub	sp, sp, #4
 	mov	r0, #0
+	str	r0, [sp]
+	mov	r0, sp
+	add	sp, sp, #4
 	bx	lr
-.Lfunc_end0:
-	.size	main, .Lfunc_end0-main
-	.fnend
 
-	.section	".note.GNU-stack","",%progbits
-	.eabi_attribute	30, 1
+.subsections_via_symbols

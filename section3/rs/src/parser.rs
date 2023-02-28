@@ -65,11 +65,15 @@ pub enum Expr {
         init: Option<Box<Expr>>,
     },
     Assign {
-        name: String,
+        lhs: Box<Expr>,
         rhs: Box<Expr>,
     },
     Deref {
         addr: Box<Expr>,
+    },
+    While {
+        cond: Box<Expr>,
+        body: Vec<Expr>,
     },
 }
 
@@ -113,11 +117,19 @@ impl Deparse for Expr {
                 name,
                 init: None,
             } => format!("{} {}", ty.deparse(), name),
-            Expr::Assign { name, rhs } => {
-                format!("{} = {}", name, rhs.deparse())
+            Expr::Assign { lhs, rhs } => {
+                format!("{} = {}", lhs.deparse(), rhs.deparse())
             }
             Expr::Var { name } => format!("{}", name),
             Expr::Deref { addr } => format!("*{}", addr.deparse()),
+            Expr::While { cond, body } => {
+                let body_str = body
+                    .iter()
+                    .map(|e| e.deparse())
+                    .collect::<Vec<_>>()
+                    .join(";\n");
+                format!("while ({}) {{\n{};\n}}", cond.deparse(), body_str)
+            }
         }
     }
 }
@@ -597,14 +609,14 @@ fn parse_logical_or_expr(state: State) -> Answer<Expr> {
 }
 
 fn parse_assignment_expr(state: State) -> Answer<Expr> {
-    let (state, identifier) = name(state)?;
+    let (state, lhs) = parse_primary_expr(state)?;
     let (state, _) = consume(state, "=")?;
-    let (state, expr) = parse_logical_or_expr(state)?;
+    let (state, rhs) = parse_logical_or_expr(state)?;
     Ok((
         state,
         Expr::Assign {
-            name: identifier,
-            rhs: Box::new(expr),
+            lhs: Box::new(lhs),
+            rhs: Box::new(rhs),
         },
     ))
 }
@@ -727,6 +739,21 @@ fn parse_return_statement(state: State) -> Answer<Expr> {
     Ok((state, expr))
 }
 
+fn parse_while_statement(state: State) -> Answer<Expr> {
+    let (state, _) = consume(state, "while")?;
+    let (state, _) = consume(state, "(")?;
+    let (state, expr) = parse_expr(state)?;
+    let (state, _) = consume(state, ")")?;
+    let (state, body) = parse_compound_statement(state)?;
+    Ok((
+        state,
+        Expr::While {
+            cond: Box::new(expr),
+            body,
+        },
+    ))
+}
+
 fn parse_statement(state: State) -> Answer<Expr> {
     grammar(
         "statement",
@@ -734,6 +761,7 @@ fn parse_statement(state: State) -> Answer<Expr> {
             Box::new(|state| try_parser(parse_return_statement, state)),
             Box::new(|state| try_parser(parse_declaration_statement, state)),
             Box::new(|state| try_parser(parse_selection_statement, state)),
+            Box::new(|state| try_parser(parse_while_statement, state)),
         ],
         state,
     )
@@ -978,7 +1006,9 @@ mod tests {
                 init: None,
             },
             Expr::Assign {
-                name: "a".to_string(),
+                lhs: Box::new(Expr::Var {
+                    name: "a".to_string(),
+                }),
                 rhs: Box::new(Expr::Var {
                     name: "x".to_string(),
                 }),
@@ -1034,11 +1064,15 @@ mod tests {
                         rhs: Box::new(Expr::Int { value: 100 }),
                     }),
                     then: vec![Expr::Assign {
-                        name: "a".to_string(),
+                        lhs: Box::new(Expr::Var {
+                            name: "a".to_string(),
+                        }),
                         rhs: Box::new(Expr::Int { value: 10 }),
                     }],
                     otherwise: vec![Expr::Assign {
-                        name: "a".to_string(),
+                        lhs: Box::new(Expr::Var {
+                            name: "a".to_string(),
+                        }),
                         rhs: Box::new(Expr::Int { value: 20 }),
                     }],
                 }],
@@ -1093,11 +1127,15 @@ mod tests {
                 init: None,
             },
             Expr::Assign {
-                name: "a".to_string(),
+                lhs: Box::new(Expr::Var {
+                    name: "a".to_string(),
+                }),
                 rhs: Box::new(Expr::Int { value: 2 }),
             },
             Expr::Assign {
-                name: "b".to_string(),
+                lhs: Box::new(Expr::Var {
+                    name: "b".to_string(),
+                }),
                 rhs: Box::new(Expr::BinOp {
                     op: Op::Add,
                     lhs: Box::new(Expr::Int { value: 3 }),
@@ -1185,7 +1223,26 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "unimplemented op: Or")] // TODO: Implement codegen for Or
+    fn test_parse_while1() {
+        let code = "int main() { while (1) { *0x08000000 = *0x08010000; } }";
+        let ret_type = Type::Int;
+        let exprs = vec![Expr::While {
+            cond: Box::new(Expr::Int { value: 1 }),
+            body: vec![
+                Expr::Assign {
+                    lhs: Box::new(Expr::Deref {
+                        addr: Box::new(Expr::Int { value: 0x08000000 }),
+                    }),
+                    rhs: Box::new(Expr::Deref {
+                        addr: Box::new(Expr::Int { value: 0x08010000 }),
+                    }),
+                },
+            ],
+        }];
+        test_main1(code, ret_type, exprs);
+    }
+
+    #[test]
     fn test_binop_prec1() {
         let code = "int main() { return 3 + 2 && (9 || 2); }";
         let ret_type = Type::Int;
@@ -1208,11 +1265,16 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "no entry found for key")] // TODO: Implement variable lookup codegen
     fn test_binop_prec2() {
-        let code = "int main() { return 3 + 2 && (9 || 2 < a * 5 >= 8) && 7 || 5 > 23; }";
+        let code = "int main() { int a; return 3 + 2 && (9 || 2 < a * 5 >= 8) && 7 || 5 > 23; }";
         let ret_type = Type::Int;
-        let exprs = vec![Expr::Return {
+        let exprs = vec![
+            Expr::Decl {
+                ty: Type::Int,
+                name: "a".to_string(),
+                init: None,
+            },
+            Expr::Return {
             expr: Box::new(Expr::BinOp {
                 op: Op::Or,
                 lhs: Box::new(Expr::BinOp {
