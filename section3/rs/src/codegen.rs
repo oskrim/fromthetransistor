@@ -295,10 +295,7 @@ impl Expr {
 
 impl Function {
     fn codegen(&self, llvm: &mut LLVM) -> Result<LLVMValueRef, String> {
-        let ret_type = match self.ret_type {
-            Type::Int => unsafe { LLVMInt32TypeInContext(llvm.ctx) },
-            Type::Void => unsafe { LLVMVoidTypeInContext(llvm.ctx) },
-        };
+        let ret_type = unsafe { LLVMInt32TypeInContext(llvm.ctx) };
 
         let mut arg_types = Vec::new();
         for arg in &self.args {
