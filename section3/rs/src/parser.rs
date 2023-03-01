@@ -1224,7 +1224,7 @@ mod tests {
 
     #[test]
     fn test_parse_while1() {
-        let code = "int main() { while (1) { *0x08000000 = *0x08010000; } }";
+        let code = "int main() { while (1) { *0x08000000 = *0x08010000 + 1; } }";
         let ret_type = Type::Int;
         let exprs = vec![Expr::While {
             cond: Box::new(Expr::Int { value: 1 }),
@@ -1233,8 +1233,12 @@ mod tests {
                     lhs: Box::new(Expr::Deref {
                         addr: Box::new(Expr::Int { value: 0x08000000 }),
                     }),
-                    rhs: Box::new(Expr::Deref {
-                        addr: Box::new(Expr::Int { value: 0x08010000 }),
+                    rhs: Box::new(Expr::BinOp {
+                        op: Op::Add,
+                        lhs: Box::new(Expr::Deref {
+                            addr: Box::new(Expr::Int { value: 0x08010000 }),
+                        }),
+                        rhs: Box::new(Expr::Int { value: 1 }),
                     }),
                 },
             ],
