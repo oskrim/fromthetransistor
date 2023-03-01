@@ -425,7 +425,7 @@ pub fn codegen(program: &Program, path: &str) {
         LLVM_InitializeAllAsmPrinters();
 
         program.codegen(&mut llvm).unwrap();
-        let target_triple = LLVMCreateMessage(cstr("armv7s-apple-ios").as_ptr());
+        let target_triple = LLVMCreateMessage(cstr("armv4t-unknown-linux-gnueabi").as_ptr());
         let mut err_string = std::mem::MaybeUninit::uninit();
         let mut target = std::ptr::null_mut();
         let ok = llvm_sys::target_machine::LLVMGetTargetFromTriple(
