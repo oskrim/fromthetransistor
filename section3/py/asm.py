@@ -107,13 +107,6 @@ def mov(dst_reg, op2, cond):
     return 0x03A00000 | (parse_reg(dst_reg) << 12) | int_to_imm(op2) | (cond << 28)
 
 
-def movt(dst_reg, imm, cond):
-  imm = parse_int(imm)
-  if imm < 0 or imm > 0xFFFF:
-    raise Exception('invalid immediate %d' % imm)
-  return 0x03000000 | (parse_reg(dst_reg) << 12) | (imm & 0xFFF) | ((imm >> 12) << 16) | (cond << 28)
-
-
 def bx(reg, cond):
   reg = parse_reg(reg)
   if reg:
