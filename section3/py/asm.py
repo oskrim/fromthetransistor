@@ -178,14 +178,6 @@ def parse(f, out, label={}, labels_only=False):
 
       ops = words.pop(0).strip()
 
-      if len(asm_insn) == 4 or len(asm_insn) == 6:
-        base_insn = asm_insn[:4]
-        cond = get_cond(asm_insn[4:])
-        match base_insn:
-          case 'movw':
-            dst, imm = strip_all(ops.split(','))
-            insn = movt(dist, imm, cond)
-
       if len(asm_insn) == 3 or len(asm_insn) == 5 or len(asm_insn) == 1:
         base_insn = asm_insn[:3]
         cond = get_cond(asm_insn[3:])
