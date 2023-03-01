@@ -91,11 +91,12 @@ def int_to_imm(i):
     return i
   shift = 0
   while highbits:
-    highbits >>= 1
+    highbits >>= 2
     shift += 1
-  if shift > 15:
+  eff_shift = shift * 2
+  if i != ((i >> eff_shift) & 0xFF) << eff_shift or shift > 15:
     raise Exception('invalid immediate %d shift %d' % (i, shift))
-  return (i >> shift) | (shift << 8)
+  return (i >> eff_shift) | (shift << 8)
 
 
 def mov(dst_reg, op2, cond):
@@ -104,6 +105,13 @@ def mov(dst_reg, op2, cond):
     return 0x01A00000 | (parse_reg(dst_reg) << 12) | src_reg | (cond << 28)
   else:
     return 0x03A00000 | (parse_reg(dst_reg) << 12) | int_to_imm(op2) | (cond << 28)
+
+
+def movt(dst_reg, imm, cond):
+  imm = parse_int(imm)
+  if imm < 0 or imm > 0xFFFF:
+    raise Exception('invalid immediate %d' % imm)
+  return 0x03000000 | (parse_reg(dst_reg) << 12) | (imm & 0xFFF) | ((imm >> 12) << 16) | (cond << 28)
 
 
 def bx(reg, cond):
@@ -133,6 +141,14 @@ def transfer(reg, base_reg, offset, cond, load=False):
   base = 0x05900000 if load else 0x05800000
   return base | (parse_reg(reg) << 12) | (parse_reg(base_reg) << 16) | int_to_imm(offset) | (cond << 28)
 
+
+def reverse_twos_complement(i, bits=23):
+  if i < 0:
+    return (1 << bits) + ((1 << bits) + i)
+  else:
+    return i
+
+
 def parse(f, out, label={}, labels_only=False):
   buf = bytes()
   i = 0
@@ -147,10 +163,7 @@ def parse(f, out, label={}, labels_only=False):
       continue
 
     # TODO: handle directives
-    if line.startswith('.'):
-      continue
-
-    if line.endswith(':'):
+    if line.startswith('.') or line.endswith(':'):
       label[line[:-1]] = i
       continue
 
@@ -164,6 +177,14 @@ def parse(f, out, label={}, labels_only=False):
         print(line)
 
       ops = words.pop(0).strip()
+
+      if len(asm_insn) == 4 or len(asm_insn) == 6:
+        base_insn = asm_insn[:4]
+        cond = get_cond(asm_insn[4:])
+        match base_insn:
+          case 'movw':
+            dst, imm = strip_all(ops.split(','))
+            insn = movt(dist, imm, cond)
 
       if len(asm_insn) == 3 or len(asm_insn) == 5 or len(asm_insn) == 1:
         base_insn = asm_insn[:3]
@@ -189,14 +210,11 @@ def parse(f, out, label={}, labels_only=False):
             else:
               insn = transfer(reg, ops[0], ops[1], cond, asm_insn == 'ldr')
 
-          case 'sub' | 'add':
+          case 'sub' | 'add' | 'orr':
             ops = strip_all(ops.split(','))
             if len(ops) != 3:
               raise Exception('invalid sub instruction %s' % line)
-            dst = ops[0]
-            op1 = ops[1]
-            op2 = ops[2]
-            insn = data_processing3(base_insn, dst, op1, op2, cond)
+            insn = data_processing3(base_insn, ops[0], ops[1], ops[2], cond)
 
           case 'cmp':
             ops = strip_all(ops.split(','))
@@ -208,13 +226,15 @@ def parse(f, out, label={}, labels_only=False):
 
           case 'b' | 'beq' | 'bne' | 'bcs' | 'bcc' | 'bmi' | 'bpl' | 'bvs' | 'bvc' | 'bhi' | 'bls' | 'bge' | 'blt' | 'bgt' | 'ble' | 'bal':
             cond = get_cond(asm_insn[1:])
-            insn = 0x0A000000 | (label[ops] - i - 2) | (cond << 28)
+            offset = reverse_twos_complement(label[ops] - i - 2)
+            insn = 0x0A000000 | offset | (cond << 28)
 
       if len(asm_insn) == 4 or len(asm_insn) == 2:
         match asm_insn[:2]:
           case 'bl' | 'bleq' | 'blne' | 'blcs' | 'blcc' | 'blmi' | 'blpl' | 'blvs' | 'blvc' | 'blhi' | 'blls' | 'blge' | 'bllt' | 'blgt' | 'blle' | 'blal':
             cond = get_cond(asm_insn[2:])
-            insn = 0x0B000000 | (label[ops] - i - 2) | (cond << 28)
+            offset = reverse_twos_complement(label[ops] - i - 2)
+            insn = 0x0B000000 | offset | (cond << 28)
 
           case 'bx':
             insn = bx(ops, get_cond(asm_insn[3:]))
