@@ -162,10 +162,6 @@ impl Expr {
                         };
                         Ok(val)
                     }
-                    Op::Assign => {
-                        let val = unsafe { LLVMBuildStore(llvm.builder, lhsval, rhsval) };
-                        Ok(val)
-                    }
                     Op::And => {
                         let val = unsafe {
                             LLVMBuildAnd(llvm.builder, lhsval, rhsval, cstr("andtmp").as_ptr())
@@ -283,8 +279,9 @@ impl Expr {
                     }
                     _ => panic!("invalid lhs"),
                 };
-                let val= rhs.codegen(llvm)?;
-                unsafe { LLVMBuildStore(llvm.builder, val, ptr) };
+                let val = rhs.codegen(llvm)?;
+                let store = unsafe { LLVMBuildStore(llvm.builder, val, ptr) };
+                unsafe { LLVMSetVolatile(store, 1) };
                 Ok(val)
             }
             Expr::Deref { addr } => {
