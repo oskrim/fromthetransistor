@@ -4,10 +4,14 @@ module top #() (
     input wire            clk,
     input wire		        i_reset,
 
-    output wire           led0_b,
-    output wire           led3_r,
-
     input wire            uart_txd_in,
     output wire           uart_rxd_out
+  );
+
+  cputest cputesti (
+    clk,
+    i_reset,
+    uart_txd_in,
+    uart_rxd_out
   );
 endmodule

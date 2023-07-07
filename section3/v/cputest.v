@@ -10,7 +10,7 @@ module cputest (
 
   wire rx_valid;
   wire wr_valid;
-  reg cpu_running;
+  wire cpu_running;
   wire [7:0] rx_data;
   // verilator lint_off UNUSEDSIGNAL
   wire [31:0] rd_data;
